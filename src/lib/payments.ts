@@ -54,6 +54,9 @@ export const payments = {
 export type AdminWithdrawal = {
   id: string;
   email: string | null;
+  username: string | null;
+  phone: string | null;
+  display_name: string | null;
   referral_code: string;
   amount: number;
   fee: number;

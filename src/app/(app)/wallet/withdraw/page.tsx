@@ -26,6 +26,8 @@ export default function WithdrawPage() {
   const [busy, setBusy] = useState(false);
 
   const available = data?.balance.available ?? 0;
+  // The PIN is no longer collected at sign-up; the first payout creates it.
+  const hasPin = data?.account.has_pin ?? false;
   const value = Number(amount) || 0;
   const fee = Math.floor((value * rules.withdrawalFeePct) / 100);
   const net = Math.max(0, value - fee);
@@ -47,10 +49,18 @@ export default function WithdrawPage() {
       return;
     }
     if (!/^\d{4}$/.test(pin)) {
-      toast.push('Enter your 4-digit security PIN.', 'err');
+      toast.push(hasPin ? 'Enter your 4-digit security PIN.' : 'Choose a 4-digit security PIN.', 'err');
       return;
     }
     setBusy(true);
+    if (!hasPin) {
+      const created = await api.account.setPin(pin);
+      if (!created.ok) {
+        setBusy(false);
+        toast.push(created.message, 'err');
+        return;
+      }
+    }
     const res = await api.wallet.requestWithdrawal({ amount: value, destination: msisdn, pin });
     setBusy(false);
     if (!res.ok) {
@@ -83,7 +93,7 @@ export default function WithdrawPage() {
           <Field label="Amount (UGX)" hint={`Minimum ${fmtUGX(rules.minWithdrawal)} UGX`}>
             <Input
               inputMode="numeric"
-              placeholder="30,000"
+              placeholder="5,000"
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, '').slice(0, 9))}
               className="tnum text-lg font-bold"
@@ -119,7 +129,14 @@ export default function WithdrawPage() {
             />
           </Field>
           <div className="mt-3">
-            <Field label="Security PIN" hint="4 digits set at registration">
+            <Field
+              label={hasPin ? 'Security PIN' : 'Create security PIN'}
+              hint={
+                hasPin
+                  ? 'Authorises this payout'
+                  : '4 digits — used for every payout and transfer'
+              }
+            >
               <Input
                 type="password"
                 inputMode="numeric"

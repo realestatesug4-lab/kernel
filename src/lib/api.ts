@@ -18,8 +18,26 @@ export const api = {
   auth: {
     /** Provision profile + referral links (level 1 & 2) after sign-up. */
     bootstrap: (referralCode: string | null) =>
-      rpc<{ user_id: string; referral_code: string }>('km_bootstrap_account', {
-        p_referral_code: referralCode,
+      rpc<{ user_id: string; referral_code: string; username: string; phone: string | null }>(
+        'km_bootstrap_account',
+        { p_referral_code: referralCode },
+      ),
+    /** Username (or phone) → the private address Supabase signs in with. */
+    loginHandle: (handle: string) =>
+      rpc<{ email: string; username: string }>('km_login_handle', { p_handle: handle }),
+    /** Sign-up pre-flight: is this username/number still free? */
+    handleAvailable: (username: string, phone: string) =>
+      rpc<{
+        username_valid: boolean;
+        username_free: boolean;
+        phone_valid: boolean;
+        phone_free: boolean;
+      }>('km_handle_available', { p_username: username, p_phone: phone }),
+    /** Members created before the switch can fill in their handle. */
+    setContact: (input: { username?: string; phone?: string }) =>
+      rpc<{ username: string | null; phone: string | null }>('km_set_contact', {
+        p_username: input.username ?? null,
+        p_phone: input.phone ?? null,
       }),
   },
 

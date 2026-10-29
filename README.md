@@ -84,6 +84,11 @@ API (route handlers, Node runtime)
   POST /api/webhooks/shasure          signed callback: credit / settle / refund
   GET  /api/admin/withdrawals         payout queue
   POST /api/admin/withdrawals/[id]    approve (disburse) or reject (refund)
+
+PWA
+  /manifest.webmanifest               manifest generated from src/app/manifest.ts
+  /sw.js /offline.html                service worker + offline card
+  /icons/* /og/*                      launcher icons + 1200x630 share card
 ```
 
 ## Architecture
@@ -103,7 +108,8 @@ src/
     admin-auth.ts   # ADMIN_EMAILS gate for route handlers
     supabase/       # browser + server clients, service-role client, config
   app/api/          # payment + admin route handlers
-  components/       # UI primitives, layout shell, providers, ReferralCard
+  components/       # UI primitives, layout shell, providers, ReferralCard,
+                    # InstallApp (PWA prompt), ServiceWorkerRegister
   proxy.ts          # session refresh + route protection
 supabase/migrations/ # schema, RPC functions, seed, payments
 ```
@@ -174,9 +180,37 @@ instantly via `km_request_deposit` and approvals settle without a payout.
 
 | Asset | Use |
 |-------|-----|
-| `public/assets/logo.jpg` | app logo, favicon, Open Graph share image |
+| `public/assets/logo.jpg` | source of truth — the only logo file to replace |
+| `public/icons/*.png` | PWA launcher icons (192, 512, maskable 512, Apple 180) |
+| `public/og/og-default.jpg` | 1200x630 Open Graph / Twitter card |
 | `public/assets/product_image.jpg` | every mining pack card/detail |
 | palette `#070707 / #ff6a00 / #ffc600` | tokens in `src/app/globals.css` |
+
+All derived assets are generated, not hand-drawn:
+
+```bash
+npm run assets     # scripts/pwa-assets.mjs — reads logo.jpg, writes icons + share card
+```
+
+The script finds the mark by scanning for the empty band between it and the
+wordmark, lifts the black background into alpha, and re-renders the share card
+text; rerun it whenever `logo.jpg` changes.
+
+## Sharing & install
+
+- `metadataBase` resolves from `NEXT_PUBLIC_SITE_URL`, then Vercel's
+  `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`, then `localhost`. Empty or
+  scheme-less values are normalised, so a blank env var can never break a build.
+- Every page inherits `openGraph` + `twitter` metadata pointing at
+  `/og/og-default.jpg` (absolute URL, 1200x630), so invite and deposit links
+  unfurl with the logo and tagline.
+- `src/app/manifest.ts` declares the standalone PWA (start at `/home`, shortcuts
+  for deposit, packs and withdraw). `ServiceWorkerRegister` registers `/sw.js`
+  in production; navigations stay network-first with an offline fallback, and
+  static chunks are stale-while-revalidate.
+- The **Download app** card on `/home` (`src/components/InstallApp.tsx`) consumes
+  `beforeinstallprompt` when the browser offers it and otherwise opens a how-to
+  sheet (iOS Safari has no prompt API).
 
 To retune the platform, edit `src/lib/brand.ts` (rules + seed) and the CSS
 custom properties at the top of `src/app/globals.css`. Protocol constants are

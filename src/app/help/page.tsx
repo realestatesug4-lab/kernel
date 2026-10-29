@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Help center' };
 const FAQ = [
   {
     q: 'When do I start earning?',
-    a: 'Your first payout lands exactly 24 hours after the moment you invest. Each following cycle repeats every 24 hours until the pack duration ends, using the server clock (not your device clock).',
+    a: 'Daily earnings are released at midnight East Africa Time, every day. A pack bought in the afternoon pays out the same night, and each following night adds one more cycle until the pack duration ends. The payout clock is the server clock, not your device clock.',
   },
   {
     q: 'Do I get my investment back at the end?',
@@ -27,7 +27,11 @@ const FAQ = [
   },
   {
     q: 'What are the task rewards?',
-    a: 'Reach 8, 28, 68 or 128 level-1 invites to unlock each milestone. Every milestone pays an extra reward you can claim once from the Task center.',
+    a: `Reach 8, 28, 68 or 128 level-1 invites to unlock each milestone. Every milestone pays an extra reward you can claim once from the Task center, and task commission is capped at ${fmtUGX(rules.taskCommissionCap)} ${rules.currency.code} per member.`,
+  },
+  {
+    q: 'Is there a welcome bonus?',
+    a: `Yes. Every new account starts with a ${fmtUGX(rules.welcomeBonus)} ${rules.currency.code} welcome bonus, credited to your available balance as soon as the account is created.`,
   },
   {
     q: 'What is the minimum deposit and withdrawal?',
@@ -35,11 +39,11 @@ const FAQ = [
   },
   {
     q: 'Why does a withdrawal need my PIN?',
-    a: 'The 4-digit security PIN you set at registration authorises withdrawals and transfers. You can change it any time in Settings → Security.',
+    a: 'A 4-digit security PIN authorises withdrawals and transfers. You choose it the first time you withdraw or send a transfer, and you can change it any time in Settings → Security.',
   },
   {
     q: 'Can I invest in several packs at once?',
-    a: 'Yes. Packs run independently and each has its own 24-hour cycle and progress bar in your portfolio.',
+    a: 'Yes. Packs run independently and each has its own midnight payout cycle and progress bar in your portfolio.',
   },
 ];
 

@@ -8,6 +8,7 @@ import {
 import { AppHeader } from '@/components/layout/TopBar';
 import { Button, Card, EmptyState, ProgressBar, Spinner } from '@/components/ui';
 import { ReferralCard } from '@/components/ReferralCard';
+import { InstallApp } from '@/components/InstallApp';
 import { useAsync } from '@/lib/useAsync';
 import { api } from '@/lib/api';
 import { fmtDate, fmtUGX, progressPct, timeLeft } from '@/lib/format';
@@ -86,6 +87,9 @@ export default function HomePage() {
           <Stat icon={<Users className="size-4" />} label="Team" value={String(stats.network_size)} />
         </div>
 
+        {/* Installs the PWA from the same build — no store listing needed. */}
+        <InstallApp />
+
         {/* Nearby milestone */}
         {nextMilestone && (
           <Link href="/tasks" className="block">
@@ -149,7 +153,7 @@ export default function HomePage() {
           {active.length === 0 ? (
             <Card className="p-4 text-center">
               <p className="text-sm font-medium">No active packs yet</p>
-              <p className="mt-1 text-xs text-muted">Buy a mining pack to start earning every 24 hours.</p>
+              <p className="mt-1 text-xs text-muted">Buy a mining pack to start earning at midnight every day.</p>
               <Link href="/products" className="mt-3 inline-block">
                 <Button size="sm">Browse packs</Button>
               </Link>

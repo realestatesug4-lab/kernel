@@ -6,17 +6,20 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 
+type SignUpInput = {
+  name: string;
+  username: string;
+  phone: string;
+  password: string;
+  referral: string | null;
+};
+
 type SessionCtx = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (input: {
-    email: string;
-    password: string;
-    pin: string;
-    referral: string | null;
-  }) => Promise<{ error: string | null }>;
+  signIn: (handle: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (input: SignUpInput) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -48,8 +51,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [supabase, router]);
 
   const signIn = useCallback<SessionCtx['signIn']>(
-    async (email, password) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+    async (handle, password) => {
+      // Members type a username (or their number); Supabase needs the address
+      // stored on the profile, so resolve it first.
+      const resolved = await api.auth.loginHandle(handle);
+      if (!resolved.ok) return { error: resolved.message };
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: resolved.data.email,
+        password,
+      });
       if (error) return { error: error.message };
       // Idempotent: provisions the profile if the sign-up trigger never fired.
       await api.auth.bootstrap(null);
@@ -61,23 +72,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signUp = useCallback<SessionCtx['signUp']>(
-    async ({ email, password, pin, referral }) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { pin, referral_code: referral ?? null } },
+    async ({ name, username, phone, password, referral }) => {
+      // The server creates the auth user with the service role (no inbox, no
+      // confirmation mail) and the trigger provisions the profile.
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, username, phone, password, referral }),
       });
-      if (error) return { error: error.message };
-      if (!data.session) {
-        return { error: 'CONFIRM_EMAIL' };
+
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        message?: string;
+      } | null;
+
+      if (!response.ok || !payload?.ok) {
+        return { error: payload?.message ?? 'Could not create the account.' };
       }
-      // Profile + referral links are provisioned server-side (trigger or RPC).
-      await api.auth.bootstrap(referral);
-      router.push('/home');
-      router.refresh();
-      return { error: null };
+
+      return signIn(username, password);
     },
-    [supabase, router],
+    [signIn],
   );
 
   const signOut = useCallback(async () => {

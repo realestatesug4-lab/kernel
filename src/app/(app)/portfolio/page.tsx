@@ -51,7 +51,7 @@ export default function PortfolioPage() {
       <div className="space-y-4 px-4 pt-4">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight">Portfolio</h1>
-          <p className="mt-0.5 text-xs text-muted">Live mining progress, credited every 24 hours.</p>
+          <p className="mt-0.5 text-xs text-muted">Live mining progress, credited at midnight every day.</p>
         </div>
 
         <Card className="grid grid-cols-3 divide-x divide-[var(--line)] p-0">
@@ -83,7 +83,7 @@ export default function PortfolioPage() {
           <div className="space-y-3">
             <EmptyState
               title={tab === 'active' ? 'No active mining yet' : 'Nothing completed yet'}
-              hint={tab === 'active' ? 'Pick a pack and your first payout starts in 24 hours.' : 'Finished packs will appear here.'}
+              hint={tab === 'active' ? 'Pick a pack and your first payout lands at the next midnight.' : 'Finished packs will appear here.'}
             />
             {tab === 'active' && (
               <Link href="/products">

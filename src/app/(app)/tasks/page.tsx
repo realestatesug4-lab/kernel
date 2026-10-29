@@ -10,7 +10,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { useAsync } from '@/lib/useAsync';
 import { api } from '@/lib/api';
 import { fmtUGX } from '@/lib/format';
-import { milestones as seedMilestones } from '@/lib/brand';
+import { milestones as seedMilestones, rules } from '@/lib/brand';
 import type { Milestone } from '@/lib/types';
 
 const seed: Milestone[] = seedMilestones.map((m) => ({
@@ -87,7 +87,7 @@ export default function TasksPage() {
 
         <p className="px-2 text-center text-[11px] leading-relaxed text-muted">
           Invites count level-1 members only. Extra rewards are credited once per milestone to your
-          available balance.
+          available balance, up to a lifetime task commission of {fmtUGX(rules.taskCommissionCap)} UGX.
         </p>
       </div>
     </>

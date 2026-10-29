@@ -93,7 +93,7 @@ export default function IncomePage() {
         ) : rows.length === 0 ? (
           <EmptyState
             title="No income yet"
-            hint="Daily pack earnings and referral commissions land here every 24 hours."
+            hint="Daily pack earnings and referral commissions land here at midnight every day."
           />
         ) : (
           <Card className="divide-y divide-[var(--line)] p-0">

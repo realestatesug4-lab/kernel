@@ -24,6 +24,8 @@ export default function TransferPage() {
   const [busy, setBusy] = useState(false);
 
   const available = data?.balance.available ?? 0;
+  // The PIN is no longer collected at sign-up; the first transfer creates it.
+  const hasPin = data?.account.has_pin ?? false;
   const value = Number(amount) || 0;
 
   async function submit(e: React.FormEvent) {
@@ -33,9 +35,19 @@ export default function TransferPage() {
       return toast.push('You cannot transfer to yourself.', 'err');
     }
     if (value <= 0 || value > available) return toast.push('Enter an amount within your balance.', 'err');
-    if (!/^\d{4}$/.test(pin)) return toast.push('Enter your 4-digit security PIN.', 'err');
+    if (!/^\d{4}$/.test(pin)) {
+      return toast.push(hasPin ? 'Enter your 4-digit security PIN.' : 'Choose a 4-digit security PIN.', 'err');
+    }
 
     setBusy(true);
+    if (!hasPin) {
+      const created = await api.account.setPin(pin);
+      if (!created.ok) {
+        setBusy(false);
+        toast.push(created.message, 'err');
+        return;
+      }
+    }
     const res = await api.wallet.transfer({ to: to.trim().toUpperCase(), amount: value, pin });
     setBusy(false);
     if (!res.ok) {
@@ -87,7 +99,10 @@ export default function TransferPage() {
           </div>
 
           <div className="mt-3">
-            <Field label="Security PIN">
+            <Field
+              label={hasPin ? 'Security PIN' : 'Create security PIN'}
+              hint={hasPin ? undefined : '4 digits — used for every payout and transfer'}
+            >
               <Input
                 type="password"
                 inputMode="numeric"

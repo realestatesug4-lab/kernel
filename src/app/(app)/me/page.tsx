@@ -11,6 +11,7 @@ import { useSession } from '@/components/providers/SessionProvider';
 import { useAsync } from '@/lib/useAsync';
 import { api } from '@/lib/api';
 import { fmtDate, fmtUGX } from '@/lib/format';
+import { formatMsisdn } from '@/lib/msisdn';
 import type { Dashboard } from '@/lib/types';
 
 const LINKS = [
@@ -53,11 +54,14 @@ export default function MePage() {
           <div className="pointer-events-none absolute -right-12 -top-16 size-40 rounded-full bg-accent/20 blur-3xl" />
           <div className="relative flex items-center gap-3">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl brand-gradient text-xl font-extrabold text-black">
-              {(account?.email ?? 'K').slice(0, 1).toUpperCase()}
+              {(account?.display_name ?? account?.username ?? 'K').slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-base font-bold">{account?.display_name ?? 'KernelMiner'}</p>
-              <p className="truncate text-xs text-muted">{account?.email ?? '—'}</p>
+              <p className="truncate text-xs text-muted">
+                {account?.username ? `@${account.username}` : '—'}
+                {account?.phone ? ` · ${formatMsisdn(account.phone)}` : ''}
+              </p>
               <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-accent-2">
                 {account?.referral_code ?? '—'}
               </p>

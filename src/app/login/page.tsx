@@ -7,13 +7,12 @@ import { PublicShell } from '@/components/layout/PublicShell';
 import { Logo } from '@/components/layout/Logo';
 import { Button, Card, Field, Input, PasswordInput } from '@/components/ui';
 import { useToast } from '@/components/providers/ToastProvider';
-import { SetupNotice } from '@/components/SetupNotice';
 import { brand, copy } from '@/lib/brand';
 
 export default function LoginPage() {
   const { signIn } = useSession();
   const toast = useToast();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -21,15 +20,15 @@ export default function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (!email || !password) {
-      setErr('Enter your email and password.');
+    if (!username || !password) {
+      setErr('Enter your username and password.');
       return;
     }
     setBusy(true);
-    const { error } = await signIn(email.trim(), password);
+    const { error } = await signIn(username.trim(), password);
     setBusy(false);
     if (error) {
-      setErr('Invalid email or password.');
+      setErr('Incorrect username or password.');
       toast.push(error, 'err');
     }
   }
@@ -47,17 +46,15 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <SetupNotice />
       <Card className="p-5">
         <form onSubmit={onSubmit} className="space-y-4">
-          <Field label="Email">
+          <Field label="Username">
             <Input
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              placeholder="your_username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))}
             />
           </Field>
           <Field label="Password" error={err}>

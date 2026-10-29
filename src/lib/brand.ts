@@ -25,12 +25,19 @@ export const rules = {
   currency: { code: 'UGX', decimals: 0, name: 'Ugandan Shilling' },
   /** Percent of an investment paid to each referral level, on successful invest. */
   referral: { level1: 19, level2: 1 },
+  /** One-off credit granted when the account is provisioned. */
+  welcomeBonus: 1_000,
   minDeposit: 30_000,
   maxDeposit: 2_000_000,
-  minWithdrawal: 30_000,
-  withdrawalFeePct: 1,
-  /** Earnings credit once per 24h cycle measured from the investment timestamp. */
-  cycleHours: 24,
+  minWithdrawal: 5_000,
+  withdrawalFeePct: 17,
+  /** Task-center referral commission ceiling, summed across all milestones. */
+  taskCommissionCap: 500_000,
+  /**
+   * Earnings are released at local midnight (East Africa Time) every day, not
+   * 24 hours after the purchase. Mirrors `km_payout_cycles` in 0006_rules.sql.
+   */
+  payout: { timezone: 'Africa/Kampala', hour: 0, label: 'midnight EAT' },
   depositStatus:
     'Deposits are collected through SHASHURA mobile money. Approve the prompt on your phone and your balance is credited the moment the network confirms.',
 } as const;
@@ -61,7 +68,7 @@ export const milestones: SeedMilestone[] = [
   { invite: 8, unlock: 30_000, extra: 10_000 },
   { invite: 28, unlock: 50_000, extra: 40_000 },
   { invite: 68, unlock: 80_000, extra: 100_000 },
-  { invite: 128, unlock: 200_000, extra: 500_000 },
+  { invite: 128, unlock: 200_000, extra: 350_000 },
 ];
 
 export const nav = {
@@ -75,14 +82,17 @@ export const nav = {
 } as const;
 
 export const copy = {
-  login: { subtitle: 'Sign in to your mining account', noAccount: 'New to KernelMiners?' },
+  login: { subtitle: 'Sign in with your username', noAccount: 'New to KernelMiners?' },
   register: {
     title: 'Create account',
     subtitle: 'Start mining in under a minute',
+    nameLabel: 'Full name',
+    usernameLabel: 'Username',
+    usernameHint: 'Used to sign in · 3-20 characters, a-z, 0-9 or _',
+    phoneLabel: 'Mobile money number',
+    phoneHint: 'Where deposits and withdrawals are settled',
     inviteLabel: 'Referral code',
     inviteHint: 'Auto-filled from your invite link',
-    pinLabel: 'Security PIN',
-    pinHint: '4 digits, used to authorise withdrawals',
     haveAccount: 'Already registered?',
   },
   about: {
@@ -106,12 +116,13 @@ export const copy = {
     ],
     highlights: [
       'Five daily-earning mining packs (KMA1–KMA5)',
-      'Returns credited every 24 hours',
+      'Returns credited at midnight, every day',
       'Two-level referral programme',
       'Withdraw any time, 24/7',
       'Live portfolio tracking',
     ],
     facts: [
+      `Welcome bonus: ${new Intl.NumberFormat('en-US').format(rules.welcomeBonus)} ${rules.currency.code}`,
       `Minimum deposit: ${new Intl.NumberFormat('en-US').format(rules.minDeposit)} ${rules.currency.code}`,
       `Minimum withdrawal: ${new Intl.NumberFormat('en-US').format(rules.minWithdrawal)} ${rules.currency.code}`,
       `Withdrawal fee: ${rules.withdrawalFeePct}%`,

@@ -139,7 +139,8 @@ export default function AdminWithdrawalsPage() {
                 <div className="min-w-0">
                   <p className="tnum text-base font-extrabold">{fmtUGX(row.amount)} UGX</p>
                   <p className="truncate text-[11px] text-muted">
-                    {row.email ?? row.referral_code} · {row.referral_code}
+                    {row.username ? `@${row.username}` : (row.email ?? row.referral_code)}
+                    {row.phone ? ` · ${formatMsisdn(row.phone)}` : ''}
                   </p>
                 </div>
                 <Badge tone={TONE[row.status]}>{row.status}</Badge>

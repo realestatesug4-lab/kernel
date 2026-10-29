@@ -24,9 +24,8 @@ export default function AboutPage() {
         <Card className="p-4">
           <p className="text-sm leading-relaxed text-muted">
             {brand.name} is a daily-earning mining programme. You buy a mining pack once and receive a
-            fixed payout every 24 hours — measured by the server clock from the exact minute of
-            purchase — for the length of that pack. Returns, progress and referrals are tracked live in
-            your account.
+            fixed payout at midnight East Africa Time, every night, for the length of that pack. Returns,
+            progress and referrals are tracked live in your account.
           </p>
           <ul className="mt-3 space-y-1.5 text-xs text-muted">
             {copy.about.highlights.map((h) => (

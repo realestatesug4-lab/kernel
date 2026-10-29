@@ -28,7 +28,7 @@ export default function ProductsPage() {
         <div>
           <h1 className="text-xl font-extrabold tracking-tight">Mining packs</h1>
           <p className="mt-0.5 text-xs text-muted">
-            Buy once, earn every 24 hours for the pack duration. Payouts are automatic.
+            Buy once, earn at midnight every day for the pack duration. Payouts are automatic.
           </p>
         </div>
 
@@ -86,7 +86,7 @@ export default function ProductsPage() {
         <Card className="p-4">
           <h2 className="text-sm font-bold">How payouts work</h2>
           <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
-            <li>· Each 24-hour cycle starts from the exact minute you invest.</li>
+            <li>· Every pack is paid at midnight East Africa Time, not 24 hours after you buy.</li>
             <li>· Daily earnings land in your available balance automatically.</li>
             <li>· The pack shows live progress until its final cycle.</li>
           </ul>

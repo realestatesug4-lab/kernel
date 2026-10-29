@@ -8,23 +8,39 @@ import { Logo } from '@/components/layout/Logo';
 import { Button, Card, Field, Input, PasswordInput } from '@/components/ui';
 import { useToast } from '@/components/providers/ToastProvider';
 import { brand, copy } from '@/lib/brand';
+import { normalizeMsisdn } from '@/lib/msisdn';
+import { normalizeUsername, usernameError } from '@/lib/identity';
+import { api } from '@/lib/api';
 
 export function RegisterForm({ defaultRef }: { defaultRef: string }) {
   const { signUp } = useSession();
   const toast = useToast();
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [pin, setPin] = useState('');
   const [referral, setReferral] = useState(defaultRef);
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) e.email = 'Enter a valid email.';
+    if (name.trim().length < 2) e.name = 'Enter your full name.';
+    const usernameIssue = usernameError(username);
+    if (usernameIssue) e.username = usernameIssue;
+    if (!normalizeMsisdn(phone)) e.phone = 'Enter a valid Ugandan mobile number.';
     if (password.length < 6) e.password = 'At least 6 characters.';
-    if (!/^\d{4}$/.test(pin)) e.pin = 'PIN must be 4 digits.';
     return e;
+  }
+
+  /** Checks the handle while the member fills the rest of the form. */
+  async function checkUsername() {
+    const handle = normalizeUsername(username);
+    if (usernameError(handle)) return;
+    const res = await api.auth.handleAvailable(handle, '');
+    if (res.ok && !res.data.username_free) {
+      setErrs((prev) => ({ ...prev, username: 'That username is already taken.' }));
+    }
   }
 
   async function onSubmit(ev: React.FormEvent) {
@@ -34,19 +50,16 @@ export function RegisterForm({ defaultRef }: { defaultRef: string }) {
     if (Object.keys(e).length) return;
     setBusy(true);
     const { error } = await signUp({
-      email: email.trim(),
+      name: name.trim(),
+      username: normalizeUsername(username),
+      phone: normalizeMsisdn(phone) ?? phone.trim(),
       password,
-      pin,
-      referral: referral.trim() || null,
+      referral: referral.trim().toUpperCase() || null,
     });
     setBusy(false);
-    if (error === 'CONFIRM_EMAIL') {
-      toast.push('Check your inbox to confirm your email, then sign in.', 'ok');
-      return;
-    }
     if (error) {
       toast.push(error, 'err');
-      setErrs({ email: 'Could not create account. Try another email.' });
+      setErrs({ username: 'Could not create the account with those details.' });
     }
   }
 
@@ -60,13 +73,32 @@ export function RegisterForm({ defaultRef }: { defaultRef: string }) {
 
       <Card className="p-5">
         <form onSubmit={onSubmit} className="space-y-4">
-          <Field label="Email" error={errs.email}>
+          <Field label={copy.register.nameLabel} error={errs.name}>
             <Input
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="name"
+              placeholder="Joel Kamya"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field label={copy.register.usernameLabel} hint={copy.register.usernameHint} error={errs.username}>
+            <Input
+              autoComplete="username"
+              autoCapitalize="none"
+              placeholder="joel_k"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+              onBlur={checkUsername}
+            />
+          </Field>
+          <Field label={copy.register.phoneLabel} hint={copy.register.phoneHint} error={errs.phone}>
+            <Input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="0770 000 000"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
           </Field>
           <Field label="Password" error={errs.password}>
@@ -75,15 +107,6 @@ export function RegisterForm({ defaultRef }: { defaultRef: string }) {
               placeholder="At least 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
-          <Field label={copy.register.pinLabel} hint={copy.register.pinHint} error={errs.pin}>
-            <Input
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="4-digit PIN"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
             />
           </Field>
           <Field label={copy.register.inviteLabel} hint={copy.register.inviteHint}>

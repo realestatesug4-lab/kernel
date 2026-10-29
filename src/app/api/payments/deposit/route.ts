@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSessionContext } from '@/lib/admin-auth';
 import { normalizeMsisdn } from '@/lib/msisdn';
 import { paymentsConfigured, requestToPay, ShashuraError } from '@/lib/shasure';
+import { rules } from '@/lib/brand';
+import { fmtUGX } from '@/lib/format';
 
 type DepositBody = { amount?: number | string; msisdn?: string };
 
@@ -30,11 +32,11 @@ export async function POST(request: Request) {
   const amount = Math.floor(Number(body.amount));
   const msisdn = normalizeMsisdn(body.msisdn);
 
-  if (!Number.isFinite(amount) || amount < 30_000) {
-    return fail('AMOUNT_TOO_SMALL', 'Minimum deposit is 30,000 UGX.');
+  if (!Number.isFinite(amount) || amount < rules.minDeposit) {
+    return fail('AMOUNT_TOO_SMALL', `Minimum deposit is ${fmtUGX(rules.minDeposit)} UGX.`);
   }
-  if (amount > 2_000_000) {
-    return fail('AMOUNT_TOO_LARGE', 'Maximum deposit is 2,000,000 UGX per request.');
+  if (amount > rules.maxDeposit) {
+    return fail('AMOUNT_TOO_LARGE', `Maximum deposit is ${fmtUGX(rules.maxDeposit)} UGX per request.`);
   }
   if (!msisdn) {
     return fail('INVALID_MSISDN', 'Enter a valid Ugandan mobile-money number.');

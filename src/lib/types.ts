@@ -4,6 +4,8 @@ export type Account = {
   id: string;
   email: string | null;
   display_name: string | null;
+  username: string;
+  phone: string | null;
   referral_code: string;
   referrer_id: string | null;
   referrer_l2_id: string | null;

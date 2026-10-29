@@ -60,7 +60,7 @@ values
   (
     '00000000-0000-4000-8000-000000000004',
     'Withdrawals and security PIN',
-    'Withdrawals require your 4-digit security PIN. The minimum is 30,000 UGX and a 1% fee applies. Requests are reviewed before payout.',
+    'Withdrawals require your 4-digit security PIN. The minimum is 30,000 UGX and a 17% fee applies. Requests are reviewed before payout.',
     'system',
     true
   )
