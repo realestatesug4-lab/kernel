@@ -4,7 +4,6 @@ import Link from 'next/link';
 import {
   ArrowUpFromLine, BadgeCheck, ChevronRight, CircleHelp, FileText, Languages, LogOut, Pickaxe,
   ShieldCheck, TrendingUp, Users, Wallet,
-  type LucideIcon,
 } from 'lucide-react';
 import { AppHeader } from '@/components/layout/TopBar';
 import { Card, Spinner } from '@/components/ui';
@@ -15,16 +14,13 @@ import { fmtDate, fmtUGX } from '@/lib/format';
 import { formatMsisdn } from '@/lib/msisdn';
 import type { Dashboard } from '@/lib/types';
 
-type MeLink = { href: string; label: string; icon: LucideIcon; admin?: boolean };
-
-const LINKS: MeLink[] = [
+const LINKS = [
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/portfolio', label: 'My portfolio', icon: Pickaxe },
   { href: '/income', label: 'Income', icon: TrendingUp },
   { href: '/team', label: 'My team', icon: Users },
   { href: '/wallet/ledger', label: 'Transaction history', icon: FileText },
   { href: '/wallet/withdrawals', label: 'Withdraw history', icon: ArrowUpFromLine },
-  { href: '/admin/withdrawals', label: 'Payout approval', icon: BadgeCheck, admin: true },
   { href: '/settings/security', label: 'Security', icon: ShieldCheck },
   { href: '/settings/language', label: 'Language', icon: Languages },
   { href: '/notice', label: 'Notices', icon: FileText },
@@ -37,8 +33,8 @@ export default function MePage() {
     () => api.account.dashboard().then((r) => (r.ok ? r.data : null)),
     [],
   );
-  // The queue itself is guarded server-side; this only keeps the link out of
-  // the way of members who cannot use it.
+  // The queue itself is guarded server-side; this only keeps the entry point out
+  // of the way of members who cannot use it.
   const { data: isAdmin } = useAsync<boolean>(
     () => api.account.isSuperAdmin().then((r) => r.ok && r.data === true),
     [],
@@ -57,7 +53,19 @@ export default function MePage() {
 
   return (
     <>
-      <AppHeader />
+      <AppHeader
+        right={
+          isAdmin === true ? (
+            <Link
+              href="/admin/withdrawals"
+              className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[11px] font-bold text-accent-2"
+            >
+              <BadgeCheck className="size-3.5" />
+              Admin
+            </Link>
+          ) : undefined
+        }
+      />
       <div className="space-y-4 px-4 pt-4">
         <Card className="relative overflow-hidden p-5">
           <div className="pointer-events-none absolute -right-12 -top-16 size-40 rounded-full bg-accent/20 blur-3xl" />
@@ -98,7 +106,7 @@ export default function MePage() {
         </Card>
 
         <Card className="divide-y divide-[var(--line)] p-0">
-          {LINKS.filter((l) => !l.admin || isAdmin === true).map((l) => (
+          {LINKS.map((l) => (
             <Link key={l.href} href={l.href} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface-2">
               <l.icon className="size-4.5 text-accent-2" />
               <span className="flex-1 text-sm font-medium">{l.label}</span>
