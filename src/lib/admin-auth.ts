@@ -3,7 +3,9 @@ import type { User } from '@supabase/supabase-js';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { LOGIN_DOMAIN } from '@/lib/identity';
 
-/** Comma-separated `ADMIN_EMAILS` env var — the only accounts allowed to release payouts. */
+/** Comma-separated `ADMIN_EMAILS` env var — bootstrap list of accounts allowed to
+ * release payouts. Day-to-day promotion happens in the database instead, see
+ * `km_set_super_admin()` in `0009_super_admin.sql`. */
 export function adminEmails(): string[] {
   return (process.env.ADMIN_EMAILS ?? '')
     .split(',')
@@ -31,5 +33,17 @@ export async function getSessionContext(): Promise<{
 }> {
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getUser();
-  return { supabase, user: data.user ?? null, isAdmin: isAdminEmail(data.user?.email) };
+  const user = data.user ?? null;
+
+  // Two sources, either one grants: `ADMIN_EMAILS` is the bootstrap / break-glass
+  // list, the `is_super_admin` flag is what an operator sets from SQL with
+  // `km_set_super_admin()` (0009_super_admin.sql). Signed out — or before that
+  // migration is applied — the flag read simply yields nothing.
+  let flagged = false;
+  if (user) {
+    const { data: isSuperAdmin } = await supabase.rpc('km_is_super_admin');
+    flagged = isSuperAdmin === true;
+  }
+
+  return { supabase, user, isAdmin: flagged || isAdminEmail(user?.email) };
 }

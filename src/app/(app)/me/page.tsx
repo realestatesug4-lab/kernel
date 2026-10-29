@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   ArrowUpFromLine, BadgeCheck, ChevronRight, CircleHelp, FileText, Languages, LogOut, Pickaxe,
   ShieldCheck, TrendingUp, Users, Wallet,
+  type LucideIcon,
 } from 'lucide-react';
 import { AppHeader } from '@/components/layout/TopBar';
 import { Card, Spinner } from '@/components/ui';
@@ -14,14 +15,16 @@ import { fmtDate, fmtUGX } from '@/lib/format';
 import { formatMsisdn } from '@/lib/msisdn';
 import type { Dashboard } from '@/lib/types';
 
-const LINKS = [
+type MeLink = { href: string; label: string; icon: LucideIcon; admin?: boolean };
+
+const LINKS: MeLink[] = [
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/portfolio', label: 'My portfolio', icon: Pickaxe },
   { href: '/income', label: 'Income', icon: TrendingUp },
   { href: '/team', label: 'My team', icon: Users },
   { href: '/wallet/ledger', label: 'Transaction history', icon: FileText },
   { href: '/wallet/withdrawals', label: 'Withdraw history', icon: ArrowUpFromLine },
-  { href: '/admin/withdrawals', label: 'Payout approval', icon: BadgeCheck },
+  { href: '/admin/withdrawals', label: 'Payout approval', icon: BadgeCheck, admin: true },
   { href: '/settings/security', label: 'Security', icon: ShieldCheck },
   { href: '/settings/language', label: 'Language', icon: Languages },
   { href: '/notice', label: 'Notices', icon: FileText },
@@ -32,6 +35,12 @@ export default function MePage() {
   const { signOut } = useSession();
   const { data, loading } = useAsync<Dashboard | null>(
     () => api.account.dashboard().then((r) => (r.ok ? r.data : null)),
+    [],
+  );
+  // The queue itself is guarded server-side; this only keeps the link out of
+  // the way of members who cannot use it.
+  const { data: isAdmin } = useAsync<boolean>(
+    () => api.account.isSuperAdmin().then((r) => r.ok && r.data === true),
     [],
   );
 
@@ -89,7 +98,7 @@ export default function MePage() {
         </Card>
 
         <Card className="divide-y divide-[var(--line)] p-0">
-          {LINKS.map((l) => (
+          {LINKS.filter((l) => !l.admin || isAdmin === true).map((l) => (
             <Link key={l.href} href={l.href} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface-2">
               <l.icon className="size-4.5 text-accent-2" />
               <span className="flex-1 text-sm font-medium">{l.label}</span>

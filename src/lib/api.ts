@@ -9,6 +9,7 @@ import type {
 export const api = {
   account: {
     dashboard: () => rpc<Dashboard>('km_dashboard'),
+    isSuperAdmin: () => rpc<boolean>('km_is_super_admin'),
     setPin: (pin: string) => rpc<boolean>('km_set_pin', { p_pin: pin }),
     setLocale: (locale: string) => rpc<boolean>('km_set_locale', { p_locale: locale }),
     updateProfile: (displayName: string) =>
