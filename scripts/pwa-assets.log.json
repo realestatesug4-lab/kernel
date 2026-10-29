@@ -1,0 +1,20 @@
+{
+  "source": "1254x1254",
+  "bands": [
+    {
+      "top": 139,
+      "bottom": 775
+    },
+    {
+      "top": 837,
+      "bottom": 1005
+    }
+  ],
+  "markCrop": {
+    "left": 261,
+    "top": 93,
+    "width": 730,
+    "height": 730
+  },
+  "size": 730
+}

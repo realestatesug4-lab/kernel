@@ -1,0 +1,183 @@
+# KernelMiners — daily-earning mining platform
+
+A mobile-first web app where users buy a **mining pack once** and receive a fixed
+payout **every 24 hours** for the pack's duration, track live progress, build a
+**two-level referral team**, and claim **invite milestones** — all in **UGX**.
+
+Built with **Next.js (App Router) + React 19 + Tailwind v4** and **Supabase**
+(Auth + RPC-only Postgres). The palette, logo and product imagery come from
+`public/assets`.
+
+## Stack
+
+| Layer     | Choice                                                              |
+|-----------|---------------------------------------------------------------------|
+| Framework | Next.js 16 (App Router, `src/`), React 19                            |
+| Styling   | Tailwind CSS v4 with CSS-variable design tokens (black/orange/yellow) |
+| Auth      | Supabase Auth (email/password), refreshed in `src/proxy.ts`          |
+| Data      | Supabase Postgres, accessed **exclusively** via `SECURITY DEFINER` RPC |
+| Icons     | lucide-react                                                        |
+
+## Getting started
+
+```bash
+npm install
+cp .env.example .env.local     # Supabase keys + SHASHURA credentials
+npm run dev
+```
+
+Apply the migrations in order (Supabase SQL editor, or `supabase db push`):
+
+```
+supabase/migrations/0001_schema.sql
+supabase/migrations/0002_functions_mutations.sql
+supabase/migrations/0003_functions_reads.sql
+supabase/migrations/0004_seed.sql
+supabase/migrations/0005_payments.sql
+```
+
+Without env vars the app still builds and runs in **demo mode** (a setup notice
+is shown on the login screen; the product catalogue falls back to
+`src/lib/catalog.ts`).
+
+## Product rules (mirrored in `src/lib/brand.ts`)
+
+| # | Pack | Price (UGX) | Daily (UGX) | Days | Total (UGX) |
+|---|------|------------:|------------:|-----:|------------:|
+| 1 | KMA1 | 30,000  | 8,000  | 6  | 48,000  |
+| 2 | KMA2 | 50,000  | 10,000 | 8  | 80,000  |
+| 3 | KMA3 | 80,000  | 15,000 | 10 | 150,000 |
+| 4 | KMA4 | 200,000 | 40,500 | 8  | 324,000 |
+| 5 | KMA5 | 400,000 | 90,000 | 8  | 720,000 |
+
+- **Cycles:** one payout per 24h measured on the **server clock** from
+  `started_at`; the pack completes after `duration_days` cycles.
+- **Referral:** 19% (level 1) + 1% (level 2) of every successful investment,
+  credited instantly to the referrer's available balance.
+- **Invite milestones:** 8 → unlock 30,000 / extra 10,000 · 28 → 50,000 / 40,000
+  · 68 → 80,000 / 100,000 · 128 → 200,000 / 500,000 (level-1 invites).
+- **Wallet:** min deposit 30,000, min withdrawal 30,000, 1% withdrawal fee,
+  4-digit security PIN for withdrawals and transfers.
+
+## Routes
+
+```
+/                     redirect → /login (signed-in users → /home via proxy)
+/login /register?ref=CODE /findpwd        public auth screens
+/about /help /notice                      public info screens
+
+(app) tab shell
+  /home          balance, quick actions (Deposits, Withdraw, Income, Strategy,
+                 Withdraw history), packs, active mining, invite card
+  /products      strategy catalogue          /products/[no]  pack detail + invest
+  /portfolio     active / completed packs with 24h progress
+  /income        earnings breakdown (daily, L1, L2, task rewards)
+  /team          invite link, level 1 / level 2 members + commission
+  /tasks         four invite milestones with claim buttons
+  /wallet        balance + recent activity
+  /wallet/{deposit,withdraw,transfer,ledger,withdrawals}
+  /me            profile + menu            /settings/{security,language}
+  /admin/withdrawals   payout queue (ADMIN_EMAILS only)
+
+API (route handlers, Node runtime)
+  POST /api/payments/deposit          push a mobile-money collection
+  POST /api/webhooks/shasure          signed callback: credit / settle / refund
+  GET  /api/admin/withdrawals         payout queue
+  POST /api/admin/withdrawals/[id]    approve (disburse) or reject (refund)
+```
+
+## Architecture
+
+```
+src/
+  lib/
+    brand.ts        # brand, rules, product & milestone seed data, copy
+    types.ts        # domain model shared with SQL
+    api.ts          # typed feature API (one call per Postgres function)
+    rpc.ts          # Supabase RPC wrapper ({ ok, data } envelope)
+    format.ts       # UGX / date / progress formatting
+    catalog.ts      # seed products used when the backend is not connected
+    shasure.ts      # server-only gateway client (token, collection, payout, HMAC)
+    payments.ts     # browser helpers for the /api payment routes
+    msisdn.ts       # Ugandan MSISDN normalisation + network lookup
+    admin-auth.ts   # ADMIN_EMAILS gate for route handlers
+    supabase/       # browser + server clients, service-role client, config
+  app/api/          # payment + admin route handlers
+  components/       # UI primitives, layout shell, providers, ReferralCard
+  proxy.ts          # session refresh + route protection
+supabase/migrations/ # schema, RPC functions, seed, payments
+```
+
+### Data access = RPC only
+
+The browser never touches tables. Every read/write calls a Postgres function
+returning `{ ok:true, data }` or `{ ok:false, code, message }`. RLS is enabled on
+every table with **no** policies and direct grants are revoked, so the functions
+are the single audited entry point.
+
+Key functions: `km_dashboard`, `km_bootstrap_account`, `km_invest`, `km_accrue`,
+`km_list_products`, `km_product_detail`, `km_list_investments`, `km_list_ledger`,
+`km_create_deposit`, `km_attach_deposit`, `km_list_deposits`,
+`km_request_withdrawal`, `km_list_withdrawals`,
+`km_transfer`, `km_team_summary`, `km_team_members`, `km_list_milestones`,
+`km_claim_milestone`, `km_list_notices`.
+
+Privileged functions (granted to `service_role` only, never the browser):
+`km_settle_payment`, `km_admin_list_withdrawals`, `km_admin_approve_withdrawal`,
+`km_admin_reject_withdrawal`, `km_admin_attach_payout`,
+`km_admin_mark_withdrawal_paid`.
+
+### Money model
+
+- **Balance:** `available / invested / earned_total / pending_withdrawal` (UGX).
+- **Invest:** `available → invested`, opens an investment row; pays 19% / 1%
+  commission to referrer and referrer's referrer.
+- **Accrue:** lazily on read — `floor((now() - started_at) / 24h)` cycles, capped
+  at `duration_days`; credits `available` + `earned_total` and flips the pack to
+  `completed` on the final cycle (principal is consumed by the payouts).
+- **Referral codes:** generated at provisioning time; `/register?ref=CODE`
+  prefills the invite field and the trigger links the two referral levels.
+- **PIN:** bcrypt via `pgcrypto`, required for withdrawals and transfers.
+
+## Payments — SHASHURA mobile money
+
+Gateway docs: <https://www.shashura.com/developers>. All gateway calls are made
+from route handlers; the client secret never reaches the browser.
+
+**Deposit (automatic).** `/wallet/deposit` posts the amount and number to
+`/api/payments/deposit`, which opens a `pending` `km_deposit` and pushes a
+`requestToPay` collection (USSD PIN prompt). The screen polls `km_list_deposits`
+while the payer approves. SHASHURA then POSTs `transaction.finalized` to
+`/api/webhooks/shasure`; after HMAC verification `km_settle_payment` credits the
+balance and writes the `deposit` ledger row — idempotent, so retries are safe.
+
+**Withdrawal (admin approved).** `km_request_withdrawal` holds the amount
+(`available → pending_withdrawal`) and allocates a `WD-…` reference. Admins see
+the queue at `/admin/withdrawals`; approval calls `disburse` for the net amount
+from the server. `SUCCESSFUL` marks the request `paid` and releases the hold;
+`FAILED` (or a gateway error) marks it `failed`/`rejected` and refunds the
+amount with a `withdrawal_refund` ledger row.
+
+Setup checklist:
+
+1. Merchant dashboard → Settings → API Access: copy client ID + secret.
+2. Settings → Apps: set the callback URL to `https://<domain>/api/webhooks/shasure`
+   and copy the signing secret into `SHASHURA_WEBHOOK_SECRET`.
+3. Whitelist the server IP (gateway returns `IP_NOT_WHITELISTED` otherwise).
+4. Set `ADMIN_EMAILS` and `SUPABASE_SERVICE_ROLE_KEY` in the hosting env.
+5. `SHASHURA_ENVIRONMENT=production` when you are done with sandbox.
+
+Without gateway credentials the app stays in demo mode: deposits credit
+instantly via `km_request_deposit` and approvals settle without a payout.
+
+## Brand assets
+
+| Asset | Use |
+|-------|-----|
+| `public/assets/logo.jpg` | app logo, favicon, Open Graph share image |
+| `public/assets/product_image.jpg` | every mining pack card/detail |
+| palette `#070707 / #ff6a00 / #ffc600` | tokens in `src/app/globals.css` |
+
+To retune the platform, edit `src/lib/brand.ts` (rules + seed) and the CSS
+custom properties at the top of `src/app/globals.css`. Protocol constants are
+mirrored in the SQL migrations — keep both in sync when changing fees or limits.
