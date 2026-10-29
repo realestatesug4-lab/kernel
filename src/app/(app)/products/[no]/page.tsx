@@ -2,17 +2,13 @@ import { fallbackProducts } from '@/lib/catalog';
 import { ProductDetail } from './ProductDetail';
 
 /**
- * The pack number only exists in the URL, so this segment is allowed to block
- * instead of failing the build while Cache Components tries to prerender
- * per-param metadata for a number it has never seen.
+ * Pack numbers come from the shipped catalogue (`src/lib/brand.ts` mirrors the
+ * `km_product` seed), so the packs we ship with are prerendered and paint
+ * instantly. A number added to the database later renders on demand.
  *
- * `generateStaticParams` still lists the seeded catalogue, so the packs we ship
- * with are prerendered; a pack added to the database later is rendered on
- * demand. The view itself is a client component — the live figures come from
+ * The view itself is a client component: live figures come from
  * `km_product_detail` in the browser.
  */
-export const instant = false;
-
 export function generateStaticParams() {
   return fallbackProducts.map((p) => ({ no: String(p.no) }));
 }

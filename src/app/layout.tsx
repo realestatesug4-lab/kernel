@@ -12,10 +12,9 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 /**
  * Canonical origin used to turn share-card paths into absolute URLs.
  *
- * Read from a single build-time value on purpose: `cacheComponents` refuses to
- * prerender metadata that touches runtime data, so `next.config.ts` bakes the
- * Vercel host into `NEXT_PUBLIC_SITE_URL` instead of reading it here.
- * Empty values and hostnames without a scheme fall back safely.
+ * Read from a single build-time value on purpose: `next.config.ts` bakes the
+ * Vercel host into `NEXT_PUBLIC_SITE_URL`, so metadata never depends on a
+ * runtime value. Empty values and hostnames without a scheme fall back safely.
  */
 function siteUrl(): URL {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim() ?? '';

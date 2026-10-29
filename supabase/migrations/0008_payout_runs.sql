@@ -11,7 +11,8 @@
 -- Idempotent by construction: `km_accrue_impl` credits whole elapsed cycles
 -- only, so running the tick twice in one day credits nothing the second time.
 -- The job can therefore be driven by pg_cron, by the Vercel cron route
--- (/api/cron/accrue at 21:00 UTC = 00:00 EAT), or by both.
+-- (/api/cron/accrue at 21:00 UTC = 00:00 EAT), or by both. `km_accrue_all()`
+-- from 0006 stays as the unaudited variant of the same sweep.
 --
 -- Run order: 0001 → … → 0007 → 0008.
 -- =============================================================================
