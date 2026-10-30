@@ -39,6 +39,8 @@ supabase/migrations/0007_identity.sql
 supabase/migrations/0008_payout_runs.sql
 supabase/migrations/0009_super_admin.sql
 supabase/migrations/0010_admin_console.sql      # operations console RPCs
+supabase/migrations/0011_support_links.sql      # Telegram support channels
+supabase/migrations/0012_admin_wallet_and_payout_gate.sql  # manual credit/debit + approve→send
 ```
 
 Without env vars the app still builds and runs in **demo mode** (a setup notice
@@ -70,6 +72,7 @@ is shown on the login screen; the product catalogue falls back to
 /                     redirect → /login (signed-in users → /home via proxy)
 /login /register?ref=CODE /findpwd        public auth screens
 /about /help /notice                      public info screens
+                                          (/notice = support links + notices)
 
 (app) tab shell
   /home          balance, quick actions (Deposits, Withdraw, Income, Strategy,
@@ -87,19 +90,21 @@ is shown on the login screen; the product catalogue falls back to
   /admin         overview: members, money, mining, queues, 14-day trends
   /admin/members /admin/members/[id]      directory + member 360° drill-down
   /admin/deposits /admin/investments /admin/ledger
-  /admin/withdrawals                     payout queue (approve / reject)
+  /admin/withdrawals                     payout queue (approve → send, or reject)
   /admin/products                        pack pricing + on-sale toggle
-  /admin/notices                         notice board editor
+  /admin/notices                         notice board + support channels
   /admin/settings                        programme rules + admin roster
 
 API (route handlers, Node runtime)
   POST /api/payments/deposit          push a mobile-money collection
   POST /api/webhooks/shasure          signed callback: credit / settle / refund
   GET  /api/admin/{overview,members,members/[id],deposits,investments,
-       ledger,products,notices,admins,config}   read (service role)
-  POST /api/admin/{products,notices,admins,config}   write
+       ledger,products,notices,support,admins,config}   read (service role)
+  POST /api/admin/{products,notices,support,admins,config}   write
+  GET  /api/markets                   live BNB/BTC/ETH/SOL/XRP/NEAR/USDT/TRX/SUI/WLD tape
   GET  /api/admin/withdrawals         payout queue
-  POST /api/admin/withdrawals/[id]    approve (disburse) or reject (refund)
+  POST /api/admin/withdrawals/[id]    approve (queue), release (disburse) or reject (refund)
+  POST /api/admin/members/[id]/wallet credit or debit one wallet (ledgered)
 
 PWA
   /manifest.webmanifest               manifest generated from src/app/manifest.ts
@@ -146,8 +151,8 @@ Key functions: `km_dashboard`, `km_bootstrap_account`, `km_invest`, `km_accrue`,
 
 Privileged functions (granted to `service_role` only, never the browser):
 `km_settle_payment`, `km_admin_list_withdrawals`, `km_admin_approve_withdrawal`,
-`km_admin_reject_withdrawal`, `km_admin_attach_payout`,
-`km_admin_mark_withdrawal_paid`.
+`km_admin_begin_payout`, `km_admin_reject_withdrawal`, `km_admin_attach_payout`,
+`km_admin_mark_withdrawal_paid`, `km_admin_adjust_wallet`.
 
 ### Money model
 
@@ -173,12 +178,24 @@ while the payer approves. SHASHURA then POSTs `transaction.finalized` to
 `/api/webhooks/shasure`; after HMAC verification `km_settle_payment` credits the
 balance and writes the `deposit` ledger row — idempotent, so retries are safe.
 
-**Withdrawal (admin approved).** `km_request_withdrawal` holds the amount
-(`available → pending_withdrawal`) and allocates a `WD-…` reference. Admins see
-the queue at `/admin/withdrawals`; approval calls `disburse` for the net amount
-from the server. `SUCCESSFUL` marks the request `paid` and releases the hold;
-`FAILED` (or a gateway error) marks it `failed`/`rejected` and refunds the
-amount with a `withdrawal_refund` ledger row.
+**Withdrawal (admin approved, in two steps).** `km_request_withdrawal` holds the
+amount (`available → pending_withdrawal`) and allocates a `WD-…` reference.
+Admins work the queue at `/admin/withdrawals`:
+
+1. **Approve** — `km_admin_approve_withdrawal` flips the request to `approved`
+   and records `approved_by`. No money moves and the gateway is not called.
+2. **Send** — `km_admin_begin_payout` refuses anything that is not approved and
+   unsent, then the route calls `disburse` for the net amount from the server.
+   `SUCCESSFUL` marks the request `paid` and releases the hold; `FAILED` (or a
+   gateway error) marks it `failed`/`rejected` and refunds the amount with a
+   `withdrawal_refund` ledger row.
+
+**Manual adjustment.** `km_admin_adjust_wallet` credits or debits one wallet by
+hand: `available` moves and a `admin_credit` / `admin_debit` ledger row is written
+in the same transaction, with the reason and the admin's email in the memo. A
+debit cannot push `available` below zero and neither direction touches
+`earned_total` (a manual credit is not mining income). Available at
+`/admin/members/[id]` → **Adjust wallet**.
 
 Setup checklist:
 
@@ -202,11 +219,11 @@ of the 480px member shell.
 |------|-----------------|
 | `/admin` | Members, money in/out, open queues, mining obligation, 14-day trends, top earners, live activity feed |
 | `/admin/members` | Searchable directory (username, phone, email, referral code) with available / invested / earned |
-| `/admin/members/[id]` | Member 360°: wallets, packs with 24h progress, every ledger row, payouts, deposits, referral team, task claims, promote/demote |
+| `/admin/members/[id]` | Member 360°: wallets with manual credit / debit, packs with 24h progress, every ledger row, payouts, deposits, referral team, task claims, promote/demote |
 | `/admin/deposits` `/admin/investments` `/admin/ledger` | Server-paginated transaction browser per table |
-| `/admin/withdrawals` | Payout queue — approve (disburse) or reject (refund) |
+| `/admin/withdrawals` | Payout queue — approve (queue it), send (disburse), or reject (refund) |
 | `/admin/products` | Pack price / daily / duration, on-sale toggle. Running contracts keep their locked-in terms |
-| `/admin/notices` | Notice board editor |
+| `/admin/notices` | Notice board editor + the Telegram support channels |
 | `/admin/settings` | Programme rules (`km_config`) and the admin roster |
 
 **Access.** Three independent gates:
@@ -237,6 +254,30 @@ appear in that roster.
 console makes one round trip per page instead of scanning tables in the browser.
 Those functions are `security definer`, revoked from `anon`/`authenticated`, and
 granted to `service_role` only; the service key never reaches the client.
+
+## Support channels
+
+Members reach a human through two Telegram destinations set in the console at
+`/admin/notices` → **Support channels**: a direct chat and the community group.
+Each has a URL and the button caption; leave a URL empty to hide that button.
+An optional support email is shown underneath.
+
+The links live in `km_setting` (text key/value; `km_config` stays numeric for the
+rules engine) and are read through `km_get_support()`, which is granted to `anon`
+so the public help centre can show them too. `km_admin_set_support()` validates
+`https://` links and is service-role only.
+
+Where they appear: `/notice` (top of the Support & notices screen, behind the
+bell on Home) and `/help`. `src/components/SupportLinks.tsx` renders nothing at
+all when both channels are off, so pages never show an empty card.
+
+## Live market tape
+
+`/api/markets` returns a 10-asset snapshot (BNB, BTC, ETH, SOL, XRP, NEAR, USDT,
+TRX, SUI, WLD) for the sliding strip on Home: price, 24h change, 24h volume and a
+24-point sparkline. It is cached in-process for 60s and sourced from CoinGecko,
+falling back to Binance (plus hourly klines for the sparkline), then to a static
+snapshot that the UI labels **Indicative**. No API key is required.
 
 ## Brand assets
 

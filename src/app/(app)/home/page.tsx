@@ -9,6 +9,7 @@ import { AppHeader } from '@/components/layout/TopBar';
 import { Button, Card, EmptyState, ProgressBar, Spinner } from '@/components/ui';
 import { ReferralCard } from '@/components/ReferralCard';
 import { InstallApp } from '@/components/InstallApp';
+import { MarketsTicker } from '@/components/market/MarketsTicker';
 import { useAsync } from '@/lib/useAsync';
 import { api } from '@/lib/api';
 import { fmtDate, fmtUGX, progressPct, timeLeft } from '@/lib/format';
@@ -118,6 +119,9 @@ export default function HomePage() {
           </Link>
         )}
 
+        {/* Live markets — the sliding crypto tape above the packs */}
+        <MarketsTicker />
+
         {/* Packs */}
         <section>
           <SectionHead title="Mining packs" href="/products" />
@@ -168,7 +172,6 @@ export default function HomePage() {
         </section>
 
         <ReferralCard code={account.referral_code} />
-        <p className="pb-2 text-center text-[11px] leading-relaxed text-muted">{brand.legal.riskNotice}</p>
       </div>
     </>
   );

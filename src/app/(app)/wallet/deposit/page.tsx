@@ -209,11 +209,6 @@ export default function DepositPage() {
           </p>
         </Card>
 
-        <Card className="flex items-start gap-2 p-3.5">
-          <Info className="mt-0.5 size-4 shrink-0 text-accent-2" />
-          <p className="text-[11px] leading-relaxed text-muted">{rules.depositStatus}</p>
-        </Card>
-
         <Button type="submit" size="lg" block loading={busy} disabled={value < rules.minDeposit || !normalized}>
           Pay {value > 0 ? `${fmtUGX(value)} UGX` : 'with mobile money'}
         </Button>

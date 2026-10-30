@@ -1,7 +1,7 @@
 import { rpc, rpcRows } from '@/lib/rpc';
 import type {
   Dashboard, Product, Investment, LedgerEntry, WithdrawalRequest, Deposit,
-  TeamMember, Milestone, RpcResult,
+  TeamMember, Milestone, NoticeItem, SupportChannels, RpcResult,
 } from '@/lib/types';
 
 /** All server interactions, grouped by feature. Each maps to a Postgres function. */
@@ -91,9 +91,10 @@ export const api = {
     claim: (id: string) => rpc<{ reward: number }>('km_claim_milestone', { p_id: id }),
   },
 
-  notices: () => rpcRows<{ id: string; title: string; body: string; kind: string; created_at: string }>(
-    'km_list_notices',
-  ),
+  notices: () => rpcRows<NoticeItem>('km_list_notices'),
+
+  /** Telegram chat + group set by an admin; nulls mean the channel is off. */
+  support: () => rpc<SupportChannels>('km_get_support'),
 };
 
 export type Api = typeof api;

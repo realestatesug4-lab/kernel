@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Megaphone, Pencil, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import {
+  ExternalLink, LifeBuoy, Megaphone, MessageCircle, Pencil, RefreshCw, Save, Send, Trash2,
+} from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import { Empty, Loading, Notice, Panel } from '@/components/admin/kit';
 import { Badge, Button } from '@/components/ui';
@@ -16,14 +18,55 @@ const EMPTY: Draft = { id: null, title: '', body: '', kind: 'system', published:
 
 const KINDS = ['system', 'update', 'promotion', 'maintenance'];
 
+/** Support channels: the two Telegram destinations plus an optional email. */
+type ChannelKey = 'chat_url' | 'chat_label' | 'group_url' | 'group_label' | 'email';
+
+const CHANNEL_KEYS: ChannelKey[] = ['chat_url', 'chat_label', 'group_url', 'group_label', 'email'];
+
+const FIELD =
+  'h-9 w-full rounded-xl border border-line bg-surface-2 px-3 text-[12px] outline-none placeholder:text-muted focus:border-accent';
+
 export default function AdminNoticesPage() {
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
 
+  // Edits are kept as an overlay so the fetched values stay the source of truth
+  // and no state has to be written from an effect after loading.
+  const [channelEdits, setChannelEdits] = useState<Partial<Record<ChannelKey, string>>>({});
+  const [busyChannels, setBusyChannels] = useState(false);
+
   const { data, loading, reload } = useAsync(() => adminApi.notices.list(), []);
   const notices = data?.ok ? data.data : [];
   const notice = data && !data.ok ? data.message : null;
+
+  const support = useAsync(() => adminApi.support.get(), []);
+  const saved = support.data?.ok ? support.data.data : null;
+
+  const channel = (key: ChannelKey): string => channelEdits[key] ?? saved?.[key] ?? '';
+  const channelsDirty = CHANNEL_KEYS.some(
+    (key) => channelEdits[key] !== undefined && channelEdits[key] !== (saved?.[key] ?? ''),
+  );
+
+  async function saveChannels() {
+    setBusyChannels(true);
+    const res = await adminApi.support.save({
+      chat_url: channel('chat_url').trim(),
+      chat_label: channel('chat_label').trim(),
+      group_url: channel('group_url').trim(),
+      group_label: channel('group_label').trim(),
+      email: channel('email').trim(),
+    });
+    setBusyChannels(false);
+
+    if (!res.ok) {
+      toast.push(res.message, 'err');
+      return;
+    }
+    toast.push('Support channels saved.', 'ok');
+    setChannelEdits({});
+    support.reload();
+  }
 
   async function save() {
     if (!draft.title.trim()) return toast.push('Give the notice a title.', 'err');
@@ -71,14 +114,115 @@ export default function AdminNoticesPage() {
   return (
     <>
       <AdminHeader
-        title="Notices"
-        description="What members read in the notice board."
+        title="Support & notices"
+        description="Where members reach you, and what they read on the notice board."
         actions={
-          <Button size="sm" variant="secondary" onClick={reload} icon={<RefreshCw className="size-3.5" />}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              reload();
+              support.reload();
+            }}
+            icon={<RefreshCw className="size-3.5" />}
+          >
             Refresh
           </Button>
         }
       />
+
+      {/* Support channels ---------------------------------------------------- */}
+      <Panel
+        className="mb-3"
+        title={
+          <span className="flex items-center gap-1.5">
+            <LifeBuoy className="size-3.5 text-accent-2" />
+            Support channels
+          </span>
+        }
+        subtitle="These buttons show at the top of Support & notices and in the help centre. Leave a link empty to hide that button."
+        action={
+          <Button
+            size="sm"
+            loading={busyChannels}
+            disabled={!channelsDirty}
+            onClick={saveChannels}
+            icon={<Save className="size-3.5" />}
+          >
+            Save channels
+          </Button>
+        }
+      >
+        {support.loading && !saved ? (
+          <Loading label="Loading channels" />
+        ) : support.data && !support.data.ok ? (
+          <Notice tone="neg">{support.data.message}</Notice>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <SupportField
+              icon={<MessageCircle className="size-4" />}
+              title="Direct chat"
+              hint="A private Telegram chat with a support agent."
+              openHref={saved?.chat_url ?? null}
+              url={
+                {
+                  value: channel('chat_url'),
+                  placeholder: 'https://t.me/kernelminers_support',
+                  onChange: (value) => setChannelEdits({ ...channelEdits, chat_url: value }),
+                }
+              }
+              label={
+                {
+                  value: channel('chat_label'),
+                  placeholder: 'Chat with support',
+                  onChange: (value) => setChannelEdits({ ...channelEdits, chat_label: value }),
+                }
+              }
+            />
+
+            <SupportField
+              icon={<Send className="size-4" />}
+              title="Telegram group"
+              hint="The community group or channel invite link."
+              openHref={saved?.group_url ?? null}
+              url={
+                {
+                  value: channel('group_url'),
+                  placeholder: 'https://t.me/+AbCdEf123456',
+                  onChange: (value) => setChannelEdits({ ...channelEdits, group_url: value }),
+                }
+              }
+              label={
+                {
+                  value: channel('group_label'),
+                  placeholder: 'Join the Telegram group',
+                  onChange: (value) => setChannelEdits({ ...channelEdits, group_label: value }),
+                }
+              }
+            />
+
+            <label className="block lg:col-span-2">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted">
+                Support email (optional)
+              </span>
+              <input
+                value={channel('email')}
+                onChange={(event) => setChannelEdits({ ...channelEdits, email: event.target.value })}
+                placeholder="support@kernelminers.com"
+                className={FIELD}
+              />
+            </label>
+          </div>
+        )}
+
+        <p className="mt-3 border-t border-line pt-3 text-[10px] leading-relaxed text-muted">
+          Links must start with <code className="text-fg">https://</code>. Saving replaces both channels at once;
+          {' '}the change is live for members immediately.
+          {saved?.updated_at && (
+            <span className="ml-1 text-muted">Last saved {fmtDateTime(saved.updated_at)}.</span>
+          )}
+        </p>
+      </Panel>
 
       <div className="grid gap-3 lg:grid-cols-5">
         {/* Editor ------------------------------------------------------------ */}
@@ -216,5 +360,69 @@ export default function AdminNoticesPage() {
         </Panel>
       </div>
     </>
+  );
+}
+
+/** One support destination: the link plus the button caption members see. */
+function SupportField({
+  icon,
+  title,
+  hint,
+  openHref,
+  url,
+  label,
+}: {
+  icon: ReactNode;
+  title: string;
+  hint: string;
+  openHref: string | null;
+  url: { value: string; placeholder: string; onChange: (value: string) => void };
+  label: { value: string; placeholder: string; onChange: (value: string) => void };
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-2/40 p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-accent-2">{icon}</span>
+        <p className="text-[12px] font-bold text-fg">{title}</p>
+        {openHref && (
+          <a
+            href={openHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold text-accent-2"
+          >
+            <ExternalLink className="size-3" />
+            Open
+          </a>
+        )}
+      </div>
+      <p className="mt-0.5 text-[10px] text-muted">{hint}</p>
+
+      <div className="mt-2 space-y-2">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Link
+          </span>
+          <input
+            value={url.value}
+            onChange={(event) => url.onChange(event.target.value)}
+            placeholder={url.placeholder}
+            inputMode="url"
+            className={FIELD}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Button text
+          </span>
+          <input
+            value={label.value}
+            onChange={(event) => label.onChange(event.target.value)}
+            placeholder={label.placeholder}
+            className={FIELD}
+          />
+        </label>
+      </div>
+    </div>
   );
 }

@@ -4,21 +4,35 @@ import { createAdminClient, hasServiceRole } from '@/lib/supabase/admin';
 import { normalizeMsisdn } from '@/lib/msisdn';
 import { disburse, paymentsConfigured, ShashuraError } from '@/lib/shasure';
 
-type Action = 'approve' | 'reject';
+type Action = 'approve' | 'release' | 'reject';
 type Body = { action?: Action; reason?: string };
 
 type RpcEnvelope<T> = { ok?: boolean; code?: string; message?: string; data?: T };
+
+type Payout = {
+  id: string;
+  amount: number;
+  net: number;
+  destination: string;
+  reference: string;
+  status: string;
+  approved_by: string | null;
+};
 
 function fail(code: string, message: string, status = 400) {
   return NextResponse.json({ ok: false, code, message }, { status });
 }
 
 /**
- * Releases or rejects a withdrawal.
+ * The two-step payout gate.
  *
- * Approve : the request is locked to `approved`, then the payout is pushed from
- *           the server. If the gateway refuses, the request is rejected again
- *           so the held amount returns to the member automatically.
+ * Approve : locks the request to `approved` and records which admin opened the
+ *           gate. No money moves and nothing is sent to SHASHURA — the held
+ *           amount stays in the member's `pending_withdrawal`.
+ * Release : `km_admin_begin_payout` refuses anything that is not approved and
+ *           unsent, then the payout is pushed from the server. If the gateway
+ *           refuses, the request is rejected again so the held amount returns
+ *           to the member's available balance automatically.
  * Reject  : the held amount is refunded to `available` and the request closed.
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -53,44 +67,44 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, data: { status: 'rejected' } });
   }
 
-  if (body.action !== 'approve') {
-    return fail('INVALID_ACTION', 'Action must be approve or reject.');
-  }
+  // Step one: approve. Money stays put and the gateway is not touched.
+  if (body.action === 'approve') {
+    const approved = await admin.rpc('km_admin_approve_withdrawal', {
+      p_id: id,
+      p_admin: user.email ?? null,
+    });
+    if (approved.error) return fail('APPROVE_FAILED', approved.error.message, 500);
 
-  const approved = await admin.rpc('km_admin_approve_withdrawal', { p_id: id });
-  if (approved.error) return fail('APPROVE_FAILED', approved.error.message, 500);
+    const row = approved.data as RpcEnvelope<{ status: string; approved_by: string | null }> | null;
+    if (!row?.ok || !row.data) {
+      return fail(row?.code ?? 'APPROVE_FAILED', row?.message ?? 'Could not approve the request.');
+    }
 
-  const row = approved.data as
-    | RpcEnvelope<{
-        id: string;
-        amount: number;
-        net: number;
-        destination: string;
-        reference: string;
-        provider_ref: string | null;
-        status: string;
-      }>
-    | null;
-  if (!row?.ok || !row.data) {
-    return fail(row?.code ?? 'APPROVE_FAILED', row?.message ?? 'Could not approve the request.');
-  }
-
-  const payout = row.data;
-  const msisdn = normalizeMsisdn(payout.destination);
-
-  // A payout was already pushed (retry after an interrupted request): never pay twice.
-  if (payout.provider_ref) {
     return NextResponse.json({
       ok: true,
       data: {
-        status: payout.status,
-        tid: payout.provider_ref,
-        net: payout.net,
-        destination: msisdn ?? payout.destination,
-        message: 'Payout already submitted to the network.',
+        status: row.data.status,
+        approved_by: row.data.approved_by,
+        message: 'Approved. Nothing has been sent to the gateway yet.',
       },
     });
   }
+
+  if (body.action !== 'release') {
+    return fail('INVALID_ACTION', 'Action must be approve, release or reject.');
+  }
+
+  // Step two: hand an approved, unsent request to the gateway.
+  const begun = await admin.rpc('km_admin_begin_payout', { p_id: id });
+  if (begun.error) return fail('RELEASE_FAILED', begun.error.message, 500);
+
+  const envelope = begun.data as RpcEnvelope<Payout> | null;
+  if (!envelope?.ok || !envelope.data) {
+    return fail(envelope?.code ?? 'RELEASE_FAILED', envelope?.message ?? 'Could not release the payout.');
+  }
+
+  const payout = envelope.data;
+  const msisdn = normalizeMsisdn(payout.destination);
 
   // The destination must be a wallet the gateway can pay, otherwise refund it.
   if (!msisdn) {

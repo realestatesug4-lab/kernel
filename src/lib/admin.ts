@@ -1,4 +1,4 @@
-import type { RpcResult } from '@/lib/types';
+import type { RpcResult, SupportChannels } from '@/lib/types';
 
 /**
  * Browser-side client for the operations console.
@@ -286,6 +286,9 @@ export type AdminNotice = {
 
 export type AdminRule = { key: string; value: number; note: string | null; updated_at: string };
 
+/** Support channels are shared verbatim with the member app (0011). */
+export type AdminSupport = SupportChannels;
+
 export type AdminAccount = {
   id: string;
   username: string;
@@ -297,6 +300,18 @@ export type AdminAccount = {
 
 export type ListPage<T> = { rows: T[]; total: number };
 
+/** Result of a manual wallet credit / debit (0012). */
+export type AdminAdjustment = {
+  ledger_id: string;
+  direction: 'credit' | 'debit';
+  amount: number;
+  memo: string;
+  available: number;
+  invested: number;
+  earned_total: number;
+  pending_withdrawal: number;
+};
+
 /* -------------------------------------------------------------------------- */
 
 export const adminApi = {
@@ -306,6 +321,9 @@ export const adminApi = {
     list: (params: { search?: string; sort?: string; limit?: number; offset?: number }) =>
       get<AdminMemberPage>(`/api/admin/members${qs(params)}`),
     detail: (id: string) => get<AdminMemberDetail>(`/api/admin/members/${id}`),
+    /** Credit or debit a wallet by hand; the movement is written to the ledger. */
+    adjust: (id: string, input: { direction: 'credit' | 'debit'; amount: number; note?: string }) =>
+      post<AdminAdjustment>(`/api/admin/members/${id}/wallet`, input),
   },
 
   deposits: {
@@ -347,6 +365,18 @@ export const adminApi = {
       published?: boolean;
     }) => post<AdminNotice>('/api/admin/notices', { ...input, action: 'save' }),
     remove: (id: string) => post<{ id: string }>('/api/admin/notices', { action: 'delete', id }),
+  },
+
+  /** Telegram chat + group shown to members. Empty strings clear a channel. */
+  support: {
+    get: () => get<AdminSupport>('/api/admin/support'),
+    save: (input: {
+      chat_url: string;
+      chat_label: string;
+      group_url: string;
+      group_label: string;
+      email: string;
+    }) => post<AdminSupport>('/api/admin/support', input),
   },
 
   rules: {

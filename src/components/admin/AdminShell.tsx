@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ComponentType, ReactNode } from 'react';
 import {
-  ArrowDownToLine, ArrowLeft, ArrowUpFromLine, LayoutDashboard, LogOut, Megaphone,
+  ArrowDownToLine, ArrowLeft, ArrowUpFromLine, LayoutDashboard, LifeBuoy, LogOut,
   Package, Pickaxe, ScrollText, SlidersHorizontal, Users,
 } from 'lucide-react';
 import { useSession } from '@/components/providers/SessionProvider';
@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
   { href: '/admin/investments', label: 'Mining', icon: Pickaxe },
   { href: '/admin/ledger', label: 'Ledger', icon: ScrollText },
   { href: '/admin/products', label: 'Packs', icon: Package },
-  { href: '/admin/notices', label: 'Notices', icon: Megaphone },
+  { href: '/admin/notices', label: 'Support', icon: LifeBuoy },
   { href: '/admin/settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 

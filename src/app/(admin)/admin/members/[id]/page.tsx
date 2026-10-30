@@ -3,12 +3,12 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, BadgeCheck, ShieldOff, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Minus, Plus, ShieldOff, ShieldCheck } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import {
   Empty, Loading, Notice, Panel, Stat, TableScroll, Td, Th, statusTone,
 } from '@/components/admin/kit';
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, Field, Input } from '@/components/ui';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useAsync } from '@/lib/useAsync';
 import { adminApi } from '@/lib/admin';
@@ -20,6 +20,9 @@ export default function AdminMemberDetailPage() {
   const id = typeof params?.id === 'string' ? params.id : '';
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustNote, setAdjustNote] = useState('');
+  const [adjusting, setAdjusting] = useState<'credit' | 'debit' | null>(null);
 
   const { data, loading, reload } = useAsync(() => adminApi.members.detail(id), [id]);
   const detail = data?.ok ? data.data : null;
@@ -76,6 +79,41 @@ export default function AdminMemberDetailPage() {
   }
 
   const { profile, balance, stats } = detail;
+
+  /**
+   * Manual credit / debit. The wallet moves server-side and a ledger entry is
+   * written in the same transaction, so the balance below is only ever a
+   * reflection of the ledger after the reload.
+   */
+  async function adjust(direction: 'credit' | 'debit') {
+    const amount = Math.round(Number(adjustAmount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.push('Enter an amount greater than zero.', 'err');
+      return;
+    }
+
+    const verb = direction === 'credit' ? 'Credit' : 'Debit';
+    const confirmed = window.confirm(
+      direction === 'credit'
+        ? `Credit ${fmtUGX(amount)} UGX to @${profile.username}?`
+        : `Debit ${fmtUGX(amount)} UGX from @${profile.username}? This reduces their available balance.`,
+    );
+    if (!confirmed) return;
+
+    setAdjusting(direction);
+    const res = await adminApi.members.adjust(id, { direction, amount, note: adjustNote.trim() });
+    setAdjusting(null);
+
+    if (!res.ok) {
+      toast.push(res.message, 'err');
+      return;
+    }
+
+    toast.push(`${verb} of ${fmtUGX(amount)} UGX recorded.`, 'ok');
+    setAdjustAmount('');
+    setAdjustNote('');
+    reload();
+  }
 
   return (
     <>
@@ -168,6 +206,59 @@ export default function AdminMemberDetailPage() {
           <Stat label="Commission" value={fmtUGX(stats.commission_l1 + stats.commission_l2)} hint="Both levels" />
           <Stat label="Task rewards" value={fmtUGX(stats.task_rewards)} hint="Milestones" />
         </div>
+
+        {/* Manual adjustment ------------------------------------------------ */}
+        <Panel
+          title="Adjust wallet"
+          subtitle="Credit or debit this wallet by hand — every movement is written to the ledger."
+        >
+          <div className="grid gap-3 sm:grid-cols-[150px_1fr_auto] sm:items-end">
+            <Field label="Amount (UGX)">
+              <Input
+                value={adjustAmount}
+                onChange={(event) => setAdjustAmount(event.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                placeholder="0"
+                className="h-10 rounded-xl text-[13px]"
+              />
+            </Field>
+            <Field label="Reason">
+              <Input
+                value={adjustNote}
+                onChange={(event) => setAdjustNote(event.target.value)}
+                maxLength={120}
+                placeholder="e.g. goodwill bonus, deposit correction"
+                className="h-10 rounded-xl text-[13px]"
+              />
+            </Field>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                loading={adjusting === 'credit'}
+                disabled={adjusting !== null}
+                onClick={() => adjust('credit')}
+                icon={<Plus className="size-3.5" />}
+              >
+                Credit
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={adjusting === 'debit'}
+                disabled={adjusting !== null}
+                onClick={() => adjust('debit')}
+                icon={<Minus className="size-3.5" />}
+              >
+                Debit
+              </Button>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            Available now <span className="tnum font-semibold text-fg">{fmtUGX(balance.available)} UGX</span>. A debit
+            cannot take the balance below zero, and neither side changes lifetime earnings. The reason is shown to the
+            member in their wallet history.
+          </p>
+        </Panel>
 
         {/* Packs ------------------------------------------------------------- */}
         <Panel title="Mining packs" subtitle={`${stats.packs} purchased · ${stats.active_packs} still running`}>

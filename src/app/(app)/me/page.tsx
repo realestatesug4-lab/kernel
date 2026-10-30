@@ -123,9 +123,6 @@ export default function MePage() {
           Sign out
         </button>
 
-        <p className="pb-2 text-center text-[11px] text-muted">
-          KernelMiners V1.0 · Earnings are not guaranteed.
-        </p>
       </div>
     </>
   );

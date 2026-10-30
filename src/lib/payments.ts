@@ -68,17 +68,32 @@ export type AdminWithdrawal = {
   provider_ref: string | null;
   failure_reason: string | null;
   created_at: string;
+  approved_at?: string | null;
+  approved_by?: string | null;
 };
 
 export const adminPayments = {
   withdrawals: (status = 'pending') =>
     get<AdminWithdrawal[]>(`/api/admin/withdrawals?status=${encodeURIComponent(status)}`),
 
+  /** Step one: queue the request. No money moves and the gateway is not called. */
   approve: (id: string) =>
-    post<{ status: string; tid?: string; simulated?: boolean; message?: string }>(
+    post<{ status: string; approved_by: string | null; message?: string }>(
       `/api/admin/withdrawals/${id}`,
       { action: 'approve' },
     ),
+
+  /** Step two: push an approved request to SHASHURA. */
+  release: (id: string) =>
+    post<{
+      status: string;
+      tid?: string;
+      net?: number;
+      charge?: number;
+      destination?: string;
+      simulated?: boolean;
+      message?: string;
+    }>(`/api/admin/withdrawals/${id}`, { action: 'release' }),
 
   reject: (id: string, reason?: string) =>
     post<{ status: string }>(`/api/admin/withdrawals/${id}`, { action: 'reject', reason }),

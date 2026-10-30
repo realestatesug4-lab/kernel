@@ -17,7 +17,7 @@ const PAGE_SIZE = 80;
 const KINDS = [
   'all', 'deposit', 'investment', 'daily_reward', 'commission_l1', 'commission_l2',
   'task_reward', 'investment_return', 'withdrawal', 'withdrawal_refund',
-  'transfer_in', 'transfer_out', 'bonus',
+  'transfer_in', 'transfer_out', 'bonus', 'admin_credit', 'admin_debit',
 ];
 
 export default function AdminLedgerPage() {

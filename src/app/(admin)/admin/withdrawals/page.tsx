@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Check, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Check, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import { Empty, Loading, Notice, Panel, Segmented, TableScroll, Td, Th, statusTone } from '@/components/admin/kit';
 import { Badge, Button } from '@/components/ui';
@@ -38,20 +38,27 @@ export default function AdminWithdrawalsPage() {
   const rows = current?.ok ? current.data : null;
   const notice = current && !current.ok ? current.message : null;
 
-  const pendingTotal = (rows ?? [])
-    .filter((row) => row.status === 'pending' || row.status === 'approved')
-    .reduce((sum, row) => sum + row.amount, 0);
-  const pendingCount = (rows ?? []).filter(
-    (row) => row.status === 'pending' || row.status === 'approved',
-  ).length;
+  const awaiting = (rows ?? []).filter((row) => row.status === 'pending');
+  const ready = (rows ?? []).filter((row) => row.status === 'approved');
+  const sum = (list: AdminWithdrawal[]) => list.reduce((total, row) => total + row.amount, 0);
 
-  async function review(row: AdminWithdrawal, action: 'approve' | 'reject') {
+  /**
+   * Two steps, deliberately: approve queues the request without touching the
+   * gateway, release pushes it. A gateway failure refunds the member.
+   */
+  async function review(row: AdminWithdrawal, action: 'approve' | 'release' | 'reject') {
     let reason: string | undefined;
 
     if (action === 'approve') {
       const ok = window.confirm(
-        `Release ${fmtUGX(row.net)} UGX to ${formatMsisdn(row.destination)}?\n\n` +
-          `Requested: ${fmtUGX(row.amount)} UGX · fee ${fmtUGX(row.fee)} UGX`,
+        `Approve ${fmtUGX(row.amount)} UGX for ${row.display_name ?? row.email ?? 'this member'}?\n\n` +
+          'This only queues the request — no money moves until you send it.',
+      );
+      if (!ok) return;
+    } else if (action === 'release') {
+      const ok = window.confirm(
+        `Send ${fmtUGX(row.net)} UGX to ${formatMsisdn(row.destination)}?\n\n` +
+          `This pushes the payout through SHASHURA. Requested ${fmtUGX(row.amount)} UGX · fee ${fmtUGX(row.fee)} UGX.`,
       );
       if (!ok) return;
     } else {
@@ -62,7 +69,11 @@ export default function AdminWithdrawalsPage() {
 
     setBusyId(row.id);
     const res =
-      action === 'approve' ? await adminPayments.approve(row.id) : await adminPayments.reject(row.id, reason);
+      action === 'approve'
+        ? await adminPayments.approve(row.id)
+        : action === 'release'
+          ? await adminPayments.release(row.id)
+          : await adminPayments.reject(row.id, reason);
     setBusyId(null);
 
     if (!res.ok) {
@@ -73,8 +84,10 @@ export default function AdminWithdrawalsPage() {
 
     toast.push(
       action === 'approve'
-        ? `Payout released to ${formatMsisdn(row.destination)}.`
-        : 'Request rejected — the amount is back in the member’s wallet.',
+        ? 'Approved — open the Approved tab when you are ready to send it.'
+        : action === 'release'
+          ? `Payout released to ${formatMsisdn(row.destination)}.`
+          : 'Request rejected — the amount is back in the member’s wallet.',
       'ok',
     );
     reload();
@@ -84,7 +97,7 @@ export default function AdminWithdrawalsPage() {
     <>
       <AdminHeader
         title="Payouts"
-        description="Approving releases the net amount from the merchant wallet through SHASHURA."
+        description="Approve first, then send. Nothing reaches SHASHURA until an admin has approved the request."
         actions={
           <Button size="sm" variant="secondary" onClick={reload} icon={<RefreshCw className="size-3.5" />}>
             Refresh
@@ -97,18 +110,28 @@ export default function AdminWithdrawalsPage() {
           <ShieldCheck className="size-4 text-accent-2" />
         </span>
         <p className="text-[11px] leading-relaxed text-muted">
-          A failed payout is refunded to the member automatically. Requests can be released by accounts in{' '}
+          <span className="font-semibold text-fg">Approve</span> only queues the request — the amount stays held.
+          <span className="font-semibold text-fg"> Send</span> pushes the net amount through the gateway; a failed
+          payout is refunded to the member automatically. Actions are limited to accounts in{' '}
           <code className="text-fg">ADMIN_EMAILS</code> or holding the <code className="text-fg">is_super_admin</code>{' '}
           flag.
         </p>
       </div>
 
-      {pendingCount > 0 && (
-        <div className="mb-3 flex items-center justify-between rounded-card border border-warn/30 bg-warn/10 px-4 py-3">
-          <span className="text-[11px] font-semibold text-warn">
-            {pendingCount} request{pendingCount === 1 ? '' : 's'} awaiting release
-          </span>
-          <span className="tnum text-sm font-extrabold text-warn">{fmtUGX(pendingTotal)} UGX</span>
+      {(awaiting.length > 0 || ready.length > 0) && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {awaiting.length > 0 && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-warn/30 bg-warn/10 px-3 py-1.5 text-[11px] font-semibold text-warn">
+              {awaiting.length} awaiting approval
+              <span className="tnum">{fmtUGX(sum(awaiting))} UGX</span>
+            </span>
+          )}
+          {ready.length > 0 && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent-soft px-3 py-1.5 text-[11px] font-semibold text-accent-2">
+              {ready.length} approved · ready to send
+              <span className="tnum">{fmtUGX(sum(ready))} UGX</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -123,7 +146,7 @@ export default function AdminWithdrawalsPage() {
           <Notice tone="neg">{notice}</Notice>
         ) : !rows?.length ? (
           <Empty
-            title={filter === 'pending' ? 'Nothing to release' : 'No requests here'}
+            title={filter === 'pending' ? 'Nothing to approve' : 'No requests here'}
             hint="Withdrawal requests appear the moment a member submits one."
           />
         ) : (
@@ -166,6 +189,11 @@ export default function AdminWithdrawalsPage() {
                     </Td>
                     <Td>
                       <Badge tone={statusTone(row.status)}>{row.status}</Badge>
+                      {row.approved_by && (
+                        <span className="mt-1 block max-w-[160px] truncate text-[10px] text-muted" title={row.approved_by}>
+                          by {row.approved_by}
+                        </span>
+                      )}
                       {row.failure_reason && (
                         <span className="mt-1 block max-w-[160px] truncate text-[10px] text-neg" title={row.failure_reason}>
                           {row.failure_reason}
@@ -176,15 +204,27 @@ export default function AdminWithdrawalsPage() {
                     <Td>
                       {actionable ? (
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => review(row, 'approve')}
-                            disabled={busyId === row.id}
-                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-bold text-accent-2 transition hover:bg-accent/20 disabled:opacity-50"
-                          >
-                            <Check className="size-3.5" />
-                            Pay
-                          </button>
+                          {row.status === 'pending' ? (
+                            <button
+                              type="button"
+                              onClick={() => review(row, 'approve')}
+                              disabled={busyId === row.id}
+                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-bold text-accent-2 transition hover:bg-accent/20 disabled:opacity-50"
+                            >
+                              <Check className="size-3.5" />
+                              Approve
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => review(row, 'release')}
+                              disabled={busyId === row.id}
+                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-bold text-accent-2 transition hover:bg-accent/20 disabled:opacity-50"
+                            >
+                              <Send className="size-3.5" />
+                              Send
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => review(row, 'reject')}

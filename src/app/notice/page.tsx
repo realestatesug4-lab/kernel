@@ -2,12 +2,12 @@
 
 import { Megaphone } from 'lucide-react';
 import { InnerPage } from '@/components/layout/InnerPage';
+import { SupportLinks } from '@/components/SupportLinks';
 import { Badge, Card, EmptyState, Spinner } from '@/components/ui';
 import { useAsync } from '@/lib/useAsync';
 import { api } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
-
-type Notice = { id: string; title: string; body: string; kind: string; created_at: string };
+import type { NoticeItem } from '@/lib/types';
 
 const TONE: Record<string, 'accent' | 'pos' | 'warn' | 'neutral'> = {
   update: 'accent',
@@ -17,11 +17,14 @@ const TONE: Record<string, 'accent' | 'pos' | 'warn' | 'neutral'> = {
 };
 
 export default function NoticePage() {
-  const { data, loading } = useAsync<Notice[]>(() => api.notices(), []);
+  const { data, loading } = useAsync<NoticeItem[]>(() => api.notices(), []);
 
   return (
-    <InnerPage title="Notices">
+    <InnerPage title="Support & notices">
       <div className="space-y-3">
+        {/* Telegram chat + group, set by an admin in the console. */}
+        <SupportLinks />
+
         {loading ? (
           <div className="grid place-items-center py-16">
             <Spinner className="size-7" />

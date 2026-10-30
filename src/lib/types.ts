@@ -104,6 +104,28 @@ export type TeamMember = {
   commission: number;
 };
 
+/** A published notice on the member notice board. */
+export type NoticeItem = {
+  id: string;
+  title: string;
+  body: string;
+  kind: string;
+  created_at: string;
+};
+
+/**
+ * Support destinations an admin sets in the console. A null URL means the
+ * channel is switched off and its button is hidden.
+ */
+export type SupportChannels = {
+  chat_url: string | null;
+  chat_label: string | null;
+  group_url: string | null;
+  group_label: string | null;
+  email: string | null;
+  updated_at: string | null;
+};
+
 /** Invite milestone: reach N direct referrals to unlock + earn a bonus. */
 export type Milestone = {
   id: string;

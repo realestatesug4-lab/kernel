@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Mail } from 'lucide-react';
 import { PublicShell } from '@/components/layout/PublicShell';
+import { SupportLinks } from '@/components/SupportLinks';
 import { Card } from '@/components/ui';
 import { brand, rules } from '@/lib/brand';
 import { fmtUGX } from '@/lib/format';
@@ -70,15 +70,8 @@ export default function HelpPage() {
           ))}
         </Card>
 
-        <Card className="flex items-center gap-3 p-4">
-          <span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent-2">
-            <Mail className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Still stuck?</p>
-            <p className="truncate text-[11px] text-muted">{brand.supportEmail}</p>
-          </div>
-        </Card>
+        {/* Telegram chat + group, set by an admin in the console. */}
+        <SupportLinks />
 
         <div className="flex justify-center gap-4 py-3 text-xs">
           <Link href="/about" className="text-accent-2">About</Link>
