@@ -41,6 +41,7 @@ supabase/migrations/0009_super_admin.sql
 supabase/migrations/0010_admin_console.sql      # operations console RPCs
 supabase/migrations/0011_support_links.sql      # Telegram support channels
 supabase/migrations/0012_admin_wallet_and_payout_gate.sql  # manual credit/debit + approve→send
+supabase/migrations/0013_rules_revision.sql  # 10,000 min withdrawal + invest-gated tasks
 ```
 
 Without env vars the app still builds and runs in **demo mode** (a setup notice

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { ArrowDownRight, ArrowUpRight, Radio } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowDownRight, ArrowUpRight, Radio, RefreshCw } from 'lucide-react';
 import { useAsync } from '@/lib/useAsync';
 import { fmtCompact, fmtUsd } from '@/lib/format';
 
@@ -38,16 +38,42 @@ async function load(): Promise<Payload | null> {
  * The sliding crypto tape above the packs.
  *
  * The track holds two identical rows and slides by exactly half its width, so
- * the loop is seamless. Prices come from `/api/markets` (60s server cache) and
- * the tape re-reads on the same beat.
+ * the loop is seamless. Prices come from `/api/markets` (15s server cache) and
+ * the tape re-reads on the same beat, flashing each card the moment its price
+ * ticks. A manual refresh lets a member pull a fresh quote on demand.
  */
 export function MarketsTicker() {
-  const { data, reload } = useAsync(load, []);
+  const { data, loading, reload } = useAsync(load, []);
+  const [movers, setMovers] = useState<Record<string, 'up' | 'down'>>({});
+  const prevPrices = useRef<Map<string, number> | null>(null);
 
   useEffect(() => {
-    const timer = window.setInterval(reload, 60_000);
+    const timer = window.setInterval(reload, 15_000);
     return () => window.clearInterval(timer);
   }, [reload]);
+
+  // Diff the incoming quotes against the last paint so only real moves flash.
+  useEffect(() => {
+    const coins = data?.coins;
+    if (!coins?.length) return;
+
+    const prev = prevPrices.current;
+    prevPrices.current = new Map(coins.map((c) => [c.symbol, c.price]));
+    if (!prev) return;
+
+    const next: Record<string, 'up' | 'down'> = {};
+    for (const coin of coins) {
+      const before = prev.get(coin.symbol);
+      if (before !== undefined && coin.price !== before) {
+        next[coin.symbol] = coin.price > before ? 'up' : 'down';
+      }
+    }
+    if (Object.keys(next).length === 0) return;
+
+    setMovers(next);
+    const clear = window.setTimeout(() => setMovers({}), 900);
+    return () => window.clearTimeout(clear);
+  }, [data]);
 
   const coins = data?.coins ?? [];
   const live = data?.source !== 'offline';
@@ -56,18 +82,26 @@ export function MarketsTicker() {
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-1.5 text-sm font-bold">
-          <Radio className={`size-3.5 ${live ? 'text-pos' : 'text-muted'}`} />
+          <Radio className={`size-3.5 ${live ? 'animate-pulse text-pos' : 'text-muted'}`} />
           Live markets
         </h2>
-        <span className="flex items-center gap-1 text-[10px] font-medium text-muted">
+        <span className="flex items-center gap-2 text-[10px] font-medium text-muted">
           {data ? (
             <>
-              <span className={`size-1.5 rounded-full ${live ? 'bg-pos' : 'bg-warn'}`} />
+              <span className={`size-1.5 rounded-full ${live ? 'animate-pulse bg-pos' : 'bg-warn'}`} />
               {SOURCE_LABEL[data.source]}
             </>
           ) : (
             'Connecting…'
           )}
+          <button
+            type="button"
+            onClick={reload}
+            aria-label="Refresh prices"
+            className="grid size-6 place-items-center rounded-full border border-line bg-surface-2 text-accent-2 transition hover:border-accent/50 active:scale-95"
+          >
+            <RefreshCw className={`size-3 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </span>
       </div>
 
@@ -81,7 +115,7 @@ export function MarketsTicker() {
             </div>
           ) : (
             <div className="ticker-track flex w-max">
-              <TickerRow coins={coins} />
+              <TickerRow coins={coins} movers={movers} />
               <TickerRow coins={coins} clone />
             </div>
           )}
@@ -93,9 +127,10 @@ export function MarketsTicker() {
 
 /**
  * One copy of the list. The trailing `pr-2` doubles as the gap at the seam, so
- * two rows sit exactly 8px apart like every other card.
+ * two rows sit exactly 8px apart like every other card. Only the live row
+ * flashes; the clone is decorative and stays quiet.
  */
-function TickerRow({ coins, clone = false }: { coins: Tick[]; clone?: boolean }) {
+function TickerRow({ coins, clone = false, movers = {} }: { coins: Tick[]; clone?: boolean; movers?: Record<string, 'up' | 'down'> }) {
   return (
     <div
       className="flex shrink-0 gap-2 pr-2"
@@ -103,17 +138,21 @@ function TickerRow({ coins, clone = false }: { coins: Tick[]; clone?: boolean })
       aria-hidden={clone || undefined}
     >
       {coins.map((coin) => (
-        <TickCard key={coin.symbol} coin={coin} />
+        <TickCard key={coin.symbol} coin={coin} mover={clone ? undefined : movers[coin.symbol]} />
       ))}
     </div>
   );
 }
 
-function TickCard({ coin }: { coin: Tick }) {
+function TickCard({ coin, mover }: { coin: Tick; mover?: 'up' | 'down' }) {
   const up = coin.change24h >= 0;
 
   return (
-    <div className="w-[128px] shrink-0 rounded-xl border border-line bg-surface-2/60 px-2.5 py-2">
+    <div
+      className={`w-[128px] shrink-0 rounded-xl border border-line bg-surface-2/60 px-2.5 py-2 ${
+        mover === 'up' ? 'tick-flash-up' : mover === 'down' ? 'tick-flash-down' : ''
+      }`}
+    >
       <div className="flex items-center justify-between gap-1">
         <span className="truncate text-[11px] font-extrabold tracking-wide text-fg">{coin.symbol}</span>
         <span

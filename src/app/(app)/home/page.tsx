@@ -8,6 +8,7 @@ import {
 import { AppHeader } from '@/components/layout/TopBar';
 import { Button, Card, EmptyState, ProgressBar, Spinner } from '@/components/ui';
 import { ReferralCard } from '@/components/ReferralCard';
+import { SupportHeaderIcons, SupportButtons } from '@/components/SupportLinks';
 import { InstallApp } from '@/components/InstallApp';
 import { MarketsTicker } from '@/components/market/MarketsTicker';
 import { useAsync } from '@/lib/useAsync';
@@ -41,10 +42,13 @@ export default function HomePage() {
     <>
       <AppHeader
         right={
-          <Link href="/notice" aria-label="Notifications" className="relative grid size-9 place-items-center rounded-full hover:bg-surface-2">
-            <Bell className="size-5" />
-            <span className="absolute right-2 top-2 size-2 rounded-full bg-accent" />
-          </Link>
+          <>
+            <SupportHeaderIcons />
+            <Link href="/notice" aria-label="Notifications" className="relative grid size-9 place-items-center rounded-full hover:bg-surface-2">
+              <Bell className="size-5" />
+              <span className="absolute right-2 top-2 size-2 rounded-full bg-accent" />
+            </Link>
+          </>
         }
       />
 
@@ -78,6 +82,9 @@ export default function HomePage() {
               <QuickAction href="/products" icon={<Pickaxe className="size-4" />} label="Strategy" />
               <QuickAction href="/wallet/withdrawals" icon={<History className="size-4" />} label="Withdraw history" />
             </div>
+
+            {/* Telegram support + community, one tap under the quick actions */}
+            <SupportButtons className="mt-3" />
           </div>
         </Card>
 
@@ -101,7 +108,7 @@ export default function HomePage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="truncate text-sm font-semibold">
-                    Invite {nextMilestone.invite_required} friends
+                    Get {nextMilestone.invite_required} friends to invest
                   </p>
                   <span className="tnum shrink-0 text-xs font-bold text-accent-2">
                     {Math.min(nextMilestone.invites, nextMilestone.invite_required)}/{nextMilestone.invite_required}

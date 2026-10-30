@@ -55,7 +55,7 @@ type MarketTick = {
 
 type MarketsPayload = { updated_at: string; source: Source; coins: MarketTick[] };
 
-const TTL_MS = 60_000;
+const TTL_MS = 15_000;
 const OFFLINE_TTL_MS = 20_000;
 
 let cache: { at: number; payload: MarketsPayload } | null = null;
@@ -194,7 +194,7 @@ export async function GET() {
   if (cache && now - cache.at < (cache.payload.source === 'offline' ? OFFLINE_TTL_MS : TTL_MS)) {
     return NextResponse.json(
       { ok: true, data: cache.payload },
-      { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+      { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=30' } },
     );
   }
 
@@ -219,6 +219,6 @@ export async function GET() {
 
   return NextResponse.json(
     { ok: true, data: payload },
-    { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+    { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=30' } },
   );
 }

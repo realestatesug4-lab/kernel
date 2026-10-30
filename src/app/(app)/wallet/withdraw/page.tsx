@@ -93,7 +93,7 @@ export default function WithdrawPage() {
           <Field label="Amount (UGX)" hint={`Minimum ${fmtUGX(rules.minWithdrawal)} UGX`}>
             <Input
               inputMode="numeric"
-              placeholder="5,000"
+              placeholder="10,000"
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, '').slice(0, 9))}
               className="tnum text-lg font-bold"

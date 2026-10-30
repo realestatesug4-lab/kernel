@@ -54,7 +54,7 @@ export default function TasksPage() {
         <div>
           <h1 className="text-xl font-extrabold tracking-tight">Task center</h1>
           <p className="mt-0.5 text-xs text-muted">
-            Invite friends on level 1 to unlock pack value and claim extra rewards.
+            Get level-1 friends to buy a mining pack to unlock pack value and claim extra rewards.
           </p>
         </div>
 
@@ -86,8 +86,9 @@ export default function TasksPage() {
         <ReferralCard code={summary?.code ?? ''} />
 
         <p className="px-2 text-center text-[11px] leading-relaxed text-muted">
-          Invites count level-1 members only. Extra rewards are credited once per milestone to your
-          available balance, up to a lifetime task commission of {fmtUGX(rules.taskCommissionCap)} UGX.
+          An invite only counts once that level-1 friend buys a mining pack. Extra rewards are
+          credited once per milestone to your available balance, up to a lifetime task commission of{' '}
+          {fmtUGX(rules.taskCommissionCap)} UGX.
         </p>
       </div>
     </>
@@ -106,7 +107,7 @@ function MilestoneCard({ m, busy, onClaim }: { m: Milestone; busy: boolean; onCl
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">Invite {m.invite_required} friends to join</p>
+          <p className="text-sm font-bold">Get {m.invite_required} friends to invest</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-semibold">
               Unlock {fmtUGX(m.unlock_amount)} UGX
@@ -132,7 +133,7 @@ function MilestoneCard({ m, busy, onClaim }: { m: Milestone; busy: boolean; onCl
         <div className="flex items-center justify-between text-[11px] text-muted">
           <span className="inline-flex items-center gap-1">
             <Users className="size-3.5" />
-            {Math.min(m.invites, m.invite_required)}/{m.invite_required} invited
+            {Math.min(m.invites, m.invite_required)}/{m.invite_required} invested
           </span>
           <span className="tnum font-semibold">
             {m.claimed ? 'Reward claimed' : m.unlocked ? 'Ready to claim' : `${Math.max(0, m.invite_required - m.invites)} to go`}

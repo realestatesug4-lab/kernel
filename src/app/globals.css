@@ -151,6 +151,23 @@ input[type='number'] {
   mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
 }
 
+/* Flash a card the instant its price ticks up or down, so the tape feels live. */
+@keyframes kernel-flash-up {
+  0%   { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pos) 65%, transparent); }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+@keyframes kernel-flash-down {
+  0%   { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--neg) 65%, transparent); }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+
+.tick-flash-up {
+  animation: kernel-flash-up 900ms ease-out;
+}
+.tick-flash-down {
+  animation: kernel-flash-down 900ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-rise {
     animation: none;
@@ -162,5 +179,10 @@ input[type='number'] {
   }
   .ticker-track [data-clone] {
     display: none;
+  }
+
+  .tick-flash-up,
+  .tick-flash-down {
+    animation: none;
   }
 }
