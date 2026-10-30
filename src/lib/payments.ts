@@ -53,6 +53,7 @@ export const payments = {
 
 export type AdminWithdrawal = {
   id: string;
+  user_id?: string;
   email: string | null;
   username: string | null;
   phone: string | null;

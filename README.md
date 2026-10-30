@@ -34,6 +34,11 @@ supabase/migrations/0002_functions_mutations.sql
 supabase/migrations/0003_functions_reads.sql
 supabase/migrations/0004_seed.sql
 supabase/migrations/0005_payments.sql
+supabase/migrations/0006_rules.sql
+supabase/migrations/0007_identity.sql
+supabase/migrations/0008_payout_runs.sql
+supabase/migrations/0009_super_admin.sql
+supabase/migrations/0010_admin_console.sql      # operations console RPCs
 ```
 
 Without env vars the app still builds and runs in **demo mode** (a setup notice
@@ -77,11 +82,22 @@ is shown on the login screen; the product catalogue falls back to
   /wallet        balance + recent activity
   /wallet/{deposit,withdraw,transfer,ledger,withdrawals}
   /me            profile + menu            /settings/{security,language}
-  /admin/withdrawals   payout queue (ADMIN_EMAILS only)
+
+(admin) operations console — own shell, no tab bar, admin session required
+  /admin         overview: members, money, mining, queues, 14-day trends
+  /admin/members /admin/members/[id]      directory + member 360° drill-down
+  /admin/deposits /admin/investments /admin/ledger
+  /admin/withdrawals                     payout queue (approve / reject)
+  /admin/products                        pack pricing + on-sale toggle
+  /admin/notices                         notice board editor
+  /admin/settings                        programme rules + admin roster
 
 API (route handlers, Node runtime)
   POST /api/payments/deposit          push a mobile-money collection
   POST /api/webhooks/shasure          signed callback: credit / settle / refund
+  GET  /api/admin/{overview,members,members/[id],deposits,investments,
+       ledger,products,notices,admins,config}   read (service role)
+  POST /api/admin/{products,notices,admins,config}   write
   GET  /api/admin/withdrawals         payout queue
   POST /api/admin/withdrawals/[id]    approve (disburse) or reject (refund)
 
@@ -175,6 +191,52 @@ Setup checklist:
 
 Without gateway credentials the app stays in demo mode: deposits credit
 instantly via `km_request_deposit` and approvals settle without a payout.
+
+## Operations console (`/admin`)
+
+A 360° view of the programme for staff. It lives in its own `(admin)` route group
+so it gets a wide canvas (sidebar on `lg+`, scrolling pill nav on phones) instead
+of the 480px member shell.
+
+| Page | What it answers |
+|------|-----------------|
+| `/admin` | Members, money in/out, open queues, mining obligation, 14-day trends, top earners, live activity feed |
+| `/admin/members` | Searchable directory (username, phone, email, referral code) with available / invested / earned |
+| `/admin/members/[id]` | Member 360°: wallets, packs with 24h progress, every ledger row, payouts, deposits, referral team, task claims, promote/demote |
+| `/admin/deposits` `/admin/investments` `/admin/ledger` | Server-paginated transaction browser per table |
+| `/admin/withdrawals` | Payout queue — approve (disburse) or reject (refund) |
+| `/admin/products` | Pack price / daily / duration, on-sale toggle. Running contracts keep their locked-in terms |
+| `/admin/notices` | Notice board editor |
+| `/admin/settings` | Programme rules (`km_config`) and the admin roster |
+
+**Access.** Three independent gates:
+
+1. `src/proxy.ts` keeps `/admin` in `PROTECTED_PREFIXES` — no session redirects to
+   `/login?next=/admin`.
+2. `src/app/(admin)/admin/layout.tsx` re-checks on the server; a signed-in
+   non-admin is bounced to `/me`.
+3. Every `/api/admin/*` handler calls `adminGuard()` from `src/lib/admin-route.ts`,
+   which returns `401 NOT_AUTHENTICATED`, `403 FORBIDDEN`, or
+   `503 NOT_CONFIGURED` when `SUPABASE_SERVICE_ROLE_KEY` is absent.
+
+Admin status comes from `ADMIN_EMAILS` (break-glass env list, matches a username
+as `user@users.kernelminers.app`) **or** the `is_super_admin` database flag, so
+grants survive redeploys:
+
+```sql
+select public.km_set_super_admin('joel.k');         -- promote by username
+select public.km_set_super_admin('joel.k', false);  -- demote
+```
+
+The same thing is available in `/admin/settings` → Administrators (the last admin
+cannot be demoted). Accounts that are admin through `ADMIN_EMAILS` only will not
+appear in that roster.
+
+**Data path.** All metrics are aggregated inside Postgres by migration
+`0010_admin_console.sql` (`km_admin_overview`, `km_admin_member_detail`, …) so the
+console makes one round trip per page instead of scanning tables in the browser.
+Those functions are `security definer`, revoked from `anon`/`authenticated`, and
+granted to `service_role` only; the service key never reaches the client.
 
 ## Brand assets
 

@@ -57,11 +57,11 @@ export default function MePage() {
         right={
           isAdmin === true ? (
             <Link
-              href="/admin/withdrawals"
+              href="/admin"
               className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[11px] font-bold text-accent-2"
             >
               <BadgeCheck className="size-3.5" />
-              Admin
+              Console
             </Link>
           ) : undefined
         }
