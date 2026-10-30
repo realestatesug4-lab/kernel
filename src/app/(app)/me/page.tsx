@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import {
-  ArrowUpFromLine, BadgeCheck, ChevronRight, CircleHelp, FileText, Languages, LogOut, Pickaxe,
+  ArrowUpFromLine, BadgeCheck, ChevronRight, CircleHelp, FileText, Info, Languages, LogOut, Pickaxe,
   ShieldCheck, TrendingUp, Users, Wallet,
 } from 'lucide-react';
 import { AppHeader } from '@/components/layout/TopBar';
@@ -23,7 +23,7 @@ const LINKS = [
   { href: '/wallet/withdrawals', label: 'Withdraw history', icon: ArrowUpFromLine },
   { href: '/settings/security', label: 'Security', icon: ShieldCheck },
   { href: '/settings/language', label: 'Language', icon: Languages },
-  { href: '/notice', label: 'Notices', icon: FileText },
+  { href: '/about-us', label: 'About Us', icon: Info },
   { href: '/help', label: 'Help center', icon: CircleHelp },
 ];
 

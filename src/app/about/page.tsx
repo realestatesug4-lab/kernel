@@ -14,7 +14,7 @@ export default function AboutPage() {
     <PublicShell>
       <div className="space-y-5">
         <div className="flex flex-col items-center gap-2 py-4 text-center">
-          <Logo size={80} withWordmark={false} />
+          <Logo size={80} withWordmark={true} />
           <h1 className="text-xl font-extrabold tracking-tight">
             About <span className="brand-text">{brand.name}</span>
           </h1>
@@ -108,9 +108,7 @@ export default function AboutPage() {
             <Button block variant="secondary">Sign in</Button>
           </Link>
         </div>
-
-        <p className="px-2 pb-4 text-center text-[11px] leading-relaxed text-muted">{brand.legal.riskNotice}</p>
-      </div>
+      </div> 
     </PublicShell>
   );
 }
