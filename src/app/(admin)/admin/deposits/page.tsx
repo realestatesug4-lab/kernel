@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, SearchCheck } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import {
   Empty, Loading, Notice, Pager, Panel, SearchBox, Segmented, TableScroll, Td, Th, statusTone,
 } from '@/components/admin/kit';
 import { Badge, Button } from '@/components/ui';
+import { useToast } from '@/components/providers/ToastProvider';
 import { useAsync } from '@/lib/useAsync';
 import { adminApi } from '@/lib/admin';
 import { fmtDateTime, fmtUGX } from '@/lib/format';
@@ -25,10 +26,12 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function AdminDepositsPage() {
+  const toast = useToast();
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [offset, setOffset] = useState(0);
+  const [reconciling, setReconciling] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -53,6 +56,36 @@ export default function AdminDepositsPage() {
   const rows = page?.rows ?? [];
   const notice = data && !data.ok ? data.message : null;
 
+  /**
+   * Recovery for lost SHASHURA callbacks: the gateway is asked directly about
+   * every stuck collection (and pushed payout) older than the grace window,
+   * and its answer is replayed through the normal settlement. Idempotent.
+   */
+  async function reconcile() {
+    setReconciling(true);
+    const res = await adminApi.deposits.reconcile();
+    setReconciling(false);
+
+    if (!res.ok) {
+      toast.push(res.message, 'err');
+      return;
+    }
+    const report = res.data;
+    if (report.skipped) {
+      toast.push('The payment gateway is not configured on this server, so there is nothing to reconcile.', 'info');
+    } else if (report.checked === 0) {
+      toast.push('Nothing is stuck — every open transaction is younger than the grace window or already closed.', 'info');
+    } else {
+      toast.push(
+        `Checked ${report.checked} stuck transaction${report.checked === 1 ? '' : 's'}: ` +
+          `${report.resolved.length} settled, ${report.pending.length} still open at the gateway` +
+          `${report.errors.length ? `, ${report.errors.length} gateway errors` : ''}.`,
+        report.resolved.length ? 'ok' : 'info',
+      );
+    }
+    reload();
+  }
+
   return (
     <>
       <AdminHeader
@@ -63,9 +96,14 @@ export default function AdminDepositsPage() {
             : 'Every mobile-money top-up.'
         }
         actions={
-          <Button size="sm" variant="secondary" onClick={reload} icon={<RefreshCw className="size-3.5" />}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={reconcile} loading={reconciling} icon={<SearchCheck className="size-3.5" />}>
+              Reconcile
+            </Button>
+            <Button size="sm" variant="secondary" onClick={reload} icon={<RefreshCw className="size-3.5" />}>
+              Refresh
+            </Button>
+          </div>
         }
       />
 

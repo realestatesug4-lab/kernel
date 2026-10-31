@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient, hasServiceRole } from '@/lib/supabase/admin';
+import { reconcileStuckTransactions } from '@/lib/reconcile';
 
 /**
  * Midnight earnings distribution.
@@ -41,5 +42,15 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json(data);
+  // Piggyback the reconciliation sweep: on plans where the extra cron entry in
+  // vercel.json is not available, this at least clears lost callbacks once a
+  // day. A failure here must not obscure a successful accrual run.
+  let reconciled: unknown = null;
+  try {
+    reconciled = await reconcileStuckTransactions();
+  } catch {
+    reconciled = { skipped: 'reconcile_failed' };
+  }
+
+  return NextResponse.json({ ...(data as object), reconciled });
 }

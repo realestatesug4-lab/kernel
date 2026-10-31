@@ -155,3 +155,22 @@ export type Dashboard = {
 export type RpcOk<T> = { ok: true; data: T };
 export type RpcErr = { ok: false; code: string; message: string };
 export type RpcResult<T> = RpcOk<T> | RpcErr;
+
+/** One transaction resolved (or re-confirmed) by the gateway reconciliation. */
+export type ReconcileItem = {
+  id: string;
+  kind: 'deposit' | 'withdrawal';
+  reference: string;
+  outcome: 'settled_success' | 'settled_failed' | 'not_found_failed' | 'still_pending' | 'error';
+  tid?: string;
+  reason?: string;
+};
+
+/** Summary of one reconciliation sweep over stuck transactions. */
+export type ReconcileReport = {
+  checked: number;
+  resolved: ReconcileItem[];
+  pending: ReconcileItem[];
+  errors: ReconcileItem[];
+  skipped?: 'payments_not_configured';
+};

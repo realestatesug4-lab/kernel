@@ -1,4 +1,4 @@
-import type { RpcResult } from '@/lib/types';
+import type { ReconcileReport, RpcResult } from '@/lib/types';
 
 /**
  * Browser-side helpers for the payment endpoints. Everything here talks to our
@@ -49,6 +49,13 @@ export const payments = {
   /** Pushes a mobile-money collection to the payer's phone. */
   createDeposit: (input: { amount: number; msisdn: string }) =>
     post<DepositInit>('/api/payments/deposit', input),
+
+  /**
+   * Asks the gateway about our own deposits that are still pending after the
+   * callback grace window and replays any settlement that was missed. Safe —
+   * and cheap — to call whenever a pending top-up is on screen.
+   */
+  recheckDeposits: () => post<ReconcileReport>('/api/payments/deposit/recheck'),
 };
 
 export type PayoutMethod = 'manual' | 'api';

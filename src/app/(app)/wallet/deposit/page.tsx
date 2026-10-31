@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, Info, Smartphone } from 'lucide-react';
 import { InnerPage } from '@/components/layout/InnerPage';
@@ -37,10 +37,30 @@ export default function DepositPage() {
   const normalized = normalizeMsisdn(msisdn);
   const network = networkOf(msisdn);
 
+  // Deposits already rechecked against the gateway this visit — the set keeps
+  // the history effect from re-firing after its own reload.
+  const recheckedRef = useRef<Set<string>>(new Set());
+
+  // A lost SHASHURA callback leaves a completed collection pending forever;
+  // when old pending rows are on screen, ask the gateway directly and refresh.
+  useEffect(() => {
+    if (!history) return;
+    const stuck = history.filter(
+      (d) =>
+        d.status === 'pending' &&
+        !recheckedRef.current.has(d.id) &&
+        Date.now() - new Date(d.created_at).getTime() > 90_000,
+    );
+    if (stuck.length === 0) return;
+    stuck.forEach((d) => recheckedRef.current.add(d.id));
+    void payments.recheckDeposits().finally(() => setHistoryKey((k) => k + 1));
+  }, [history]);
+
   // Poll the deposit while the payer approves the USSD prompt.
   useEffect(() => {
     if (!pending || pending.simulated) return;
     let alive = true;
+    let ticks = 0;
 
     const check = async () => {
       const rows = await api.deposits.list(5);
@@ -56,6 +76,10 @@ export default function DepositPage() {
         toast.push('The payment was not completed. You can try again.', 'err');
         setPending(null);
         setHistoryKey((k) => k + 1);
+      } else if (++ticks === 5) {
+        // Still pending after ~20s: the callback may be lost in flight. Ask
+        // the gateway directly; the next poll reads the settled status.
+        void payments.recheckDeposits();
       }
     };
 

@@ -1,4 +1,4 @@
-import type { RpcResult, SupportChannels } from '@/lib/types';
+import type { ReconcileReport, RpcResult, SupportChannels } from '@/lib/types';
 
 /**
  * Browser-side client for the operations console.
@@ -329,6 +329,9 @@ export const adminApi = {
   deposits: {
     list: (params: { status?: string; search?: string; limit?: number; offset?: number }) =>
       get<ListPage<AdminDepositRow>>(`/api/admin/deposits${qs(params)}`),
+
+    /** Ask SHASHURA about every stuck transaction and replay the settlement. */
+    reconcile: () => post<ReconcileReport>('/api/admin/reconcile', {}),
   },
 
   investments: {
