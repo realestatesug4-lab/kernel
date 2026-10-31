@@ -122,6 +122,26 @@ input[type='number'] {
   animation: kernel-rise 0.32s ease-out both;
 }
 
+/* A confirmation lands: the tick scales in instead of simply appearing. */
+@keyframes kernel-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pop {
+  animation: kernel-pop 0.28s ease-out both;
+}
+
 /*
  * Live market tape. The track holds two identical rows, so sliding it by half
  * its own width lands exactly on the start of the second copy.
@@ -170,6 +190,10 @@ input[type='number'] {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-rise {
+    animation: none;
+  }
+
+  .animate-pop {
     animation: none;
   }
 

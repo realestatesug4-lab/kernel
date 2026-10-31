@@ -11,8 +11,11 @@ import { reconcileStuckTransactions } from '@/lib/reconcile';
  * looks every stuck row up with `GET /enquiry/{reference}` and feeds the
  * gateway's answer into the same idempotent settlement the webhook uses.
  *
- * Guarded by CRON_SECRET exactly like /api/cron/accrue, so Vercel Cron and an
- * operator with the secret can both call it.
+ * Guarded by CRON_SECRET exactly like /api/cron/accrue. On Vercel Pro this can
+ * be scheduled every few minutes via vercel.json; on Hobby (one daily cron) it
+ * is still useful as a manual operator call — `curl -H "Authorization: Bearer
+ * $CRON_SECRET" <url>` — while daily cleanup rides the accrue cron and traffic
+ * itself triggers background sweeps via scheduleBackgroundReconcile().
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();

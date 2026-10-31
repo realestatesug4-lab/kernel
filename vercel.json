@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/accrue",
       "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/cron/reconcile",
-      "schedule": "*/30 * * * *"
     }
   ]
 }

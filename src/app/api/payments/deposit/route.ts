@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionContext } from '@/lib/admin-auth';
 import { normalizeMsisdn } from '@/lib/msisdn';
 import { paymentsConfigured, requestToPay, ShashuraError } from '@/lib/shasure';
+import { scheduleBackgroundReconcile } from '@/lib/reconcile';
 import { rules } from '@/lib/brand';
 import { fmtUGX } from '@/lib/format';
 
@@ -21,6 +22,10 @@ function fail(code: string, message: string, status = 400) {
 export async function POST(request: Request) {
   const { supabase, user } = await getSessionContext();
   if (!user) return fail('NOT_AUTHENTICATED', 'Sign in to deposit.', 401);
+
+  // Money activity is the moment to clear yesterday's lost callbacks: sweep
+  // stuck rows in the background, after the response, at most every 10 min.
+  scheduleBackgroundReconcile();
 
   let body: DepositBody;
   try {

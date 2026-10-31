@@ -172,13 +172,15 @@ export default function AdminWithdrawalsPage() {
                 return (
                   <tr key={row.id} className="hover:bg-surface-2/50">
                     <Td>
-                      <span className="block truncate text-[12px] font-semibold text-fg">
-                        {row.display_name ?? (row.username ? `@${row.username}` : (row.email ?? 'Unknown'))}
-                      </span>
-                      <span className="block truncate text-[10px] text-muted">
-                        {row.username ? `@${row.username}` : row.email}
-                        {row.phone ? ` · ${formatMsisdn(row.phone)}` : ''}
-                      </span>
+                      <Link
+                        href={`/admin/members/${row.user_id}`}
+                        className="block truncate text-[12px] font-semibold text-fg hover:text-accent-2"
+                      >
+                        {row.display_name ?? `@${row.username ?? 'unknown'}`}
+                      </Link>
+                      {row.username && (
+                        <span className="block truncate text-[10px] text-muted">@{row.username}</span>
+                      )}
                     </Td>
                     <Td className="tnum text-right font-semibold">{fmtUGX(row.amount)}</Td>
                     <Td className="tnum text-right">
@@ -258,16 +260,7 @@ export default function AdminWithdrawalsPage() {
                             Reject
                           </button>
                         </div>
-                      ) : (
-                        row.user_id ? (
-                          <Link
-                            href={`/admin/members/${row.user_id}`}
-                            className="block text-right text-[10px] text-muted hover:text-accent-2"
-                          >
-                            Member
-                          </Link>
-                        ) : null
-                      )}
+                      ) : null}
                     </Td>
                   </tr>
                 );
@@ -292,7 +285,10 @@ export default function AdminWithdrawalsPage() {
             <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Payout method</div>
             <h3 className="text-[15px] font-bold text-fg">
               Approve {fmtUGX(methodRow.amount)} UGX for{' '}
-              {methodRow.display_name ?? methodRow.username ?? methodRow.email ?? 'this member'}
+              {methodRow.display_name ?? methodRow.username ?? 'this member'}
+              {methodRow.display_name && methodRow.username ? (
+                <span className="text-muted"> @{methodRow.username}</span>
+              ) : null}
             </h3>
             <p className="mt-1 text-[11px] text-muted">
               Net {fmtUGX(methodRow.net)} UGX · fee {fmtUGX(methodRow.fee)} UGX · to {formatMsisdn(methodRow.destination)}

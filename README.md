@@ -42,6 +42,8 @@ supabase/migrations/0010_admin_console.sql      # operations console RPCs
 supabase/migrations/0011_support_links.sql      # Telegram support channels
 supabase/migrations/0012_admin_wallet_and_payout_gate.sql  # manual credit/debit + approve→send
 supabase/migrations/0013_rules_revision.sql  # 10,000 min withdrawal + invest-gated tasks
+supabase/migrations/0014_payout_method.sql   # payout method at approval, min withdrawal 5,000
+supabase/migrations/0015_deposit_confirmation.sql  # admin deposit confirm + status metrics
 ```
 
 Without env vars the app still builds and runs in **demo mode** (a setup notice
@@ -90,7 +92,8 @@ is shown on the login screen; the product catalogue falls back to
 (admin) operations console — own shell, no tab bar, admin session required
   /admin         overview: members, money, mining, queues, 14-day trends
   /admin/members /admin/members/[id]      directory + member 360° drill-down
-  /admin/deposits /admin/investments /admin/ledger
+  /admin/deposits                        collections: status metrics + hand-confirm
+  /admin/investments /admin/ledger
   /admin/withdrawals                     payout queue (approve → send, or reject)
   /admin/products                        pack pricing + on-sale toggle
   /admin/notices                         notice board + support channels
@@ -106,6 +109,7 @@ API (route handlers, Node runtime)
   GET  /api/admin/withdrawals         payout queue
   POST /api/admin/withdrawals/[id]    approve (queue), release (disburse) or reject (refund)
   POST /api/admin/members/[id]/wallet credit or debit one wallet (ledgered)
+  POST /api/admin/deposits/confirm    confirm one deposit by hand (credits + ledger)
 
 PWA
   /manifest.webmanifest               manifest generated from src/app/manifest.ts
@@ -153,7 +157,8 @@ Key functions: `km_dashboard`, `km_bootstrap_account`, `km_invest`, `km_accrue`,
 Privileged functions (granted to `service_role` only, never the browser):
 `km_settle_payment`, `km_admin_list_withdrawals`, `km_admin_approve_withdrawal`,
 `km_admin_begin_payout`, `km_admin_reject_withdrawal`, `km_admin_attach_payout`,
-`km_admin_mark_withdrawal_paid`, `km_admin_adjust_wallet`.
+`km_admin_mark_withdrawal_paid`, `km_admin_adjust_wallet`,
+`km_admin_confirm_deposit`.
 
 ### Money model
 

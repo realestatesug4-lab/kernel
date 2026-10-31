@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Clock, Info, Smartphone } from 'lucide-react';
+import { CheckCircle2, Clock, Smartphone } from 'lucide-react';
 import { InnerPage } from '@/components/layout/InnerPage';
 import { Badge, Button, Card, Field, EmptyState, Input, Spinner } from '@/components/ui';
 import { useToast } from '@/components/providers/ToastProvider';

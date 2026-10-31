@@ -193,11 +193,29 @@ export type AdminDepositRow = {
   provider_ref: string | null;
   created_at: string;
   confirmed_at: string | null;
+  /** Set when an admin closes a deposit by hand (0015). */
+  confirmed_by?: string | null;
   user_id: string;
   /** Present on the cross-member list, absent on a single member's history. */
   username?: string;
   display_name?: string | null;
   phone?: string | null;
+};
+
+/** Per-status breakdown of the current deposits search (0015). */
+export type AdminDepositStats = Record<'confirmed' | 'pending' | 'failed', { count: number; total: number }>;
+
+export type AdminDepositPage = ListPage<AdminDepositRow> & { stats: AdminDepositStats };
+
+/** Result of hand-confirming one deposit. */
+export type AdminDepositConfirm = {
+  id: string;
+  status: 'confirmed';
+  amount: number;
+  /** False when the deposit was already closed — nothing was credited again. */
+  credited: boolean;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
 };
 
 export type AdminInvestment = {
@@ -328,7 +346,10 @@ export const adminApi = {
 
   deposits: {
     list: (params: { status?: string; search?: string; limit?: number; offset?: number }) =>
-      get<ListPage<AdminDepositRow>>(`/api/admin/deposits${qs(params)}`),
+      get<AdminDepositPage>(`/api/admin/deposits${qs(params)}`),
+
+    /** Close a stuck collection by hand: credits the wallet and logs the move. */
+    confirm: (id: string) => post<AdminDepositConfirm>('/api/admin/deposits/confirm', { id }),
 
     /** Ask SHASHURA about every stuck transaction and replay the settlement. */
     reconcile: () => post<ReconcileReport>('/api/admin/reconcile', {}),

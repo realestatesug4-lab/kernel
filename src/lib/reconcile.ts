@@ -1,4 +1,5 @@
 import 'server-only';
+import { after } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { enquiry, paymentsConfigured, ShashuraError } from '@/lib/shasure';
 import type { ReconcileItem, ReconcileReport } from '@/lib/types';
@@ -23,17 +24,27 @@ import type { ReconcileItem, ReconcileReport } from '@/lib/types';
  *                touched: they have no gateway transaction to reconcile.
  * Rows younger than the grace window are left alone so in-flight USSD prompts
  * settle through the normal callback path.
+ *
+ * Cadence without a frequent cron (Vercel Hobby allows one daily run): the
+ * sweep rides the daily accrue cron, can be fired from the console, from
+ * /api/cron/reconcile when a secret curl is handy, and — via
+ * `scheduleBackgroundReconcile()` — opportunistically after real traffic:
+ * every deposit creation and every admin deposits view tops up the queue.
  */
 
 /** Give the callback this long before the sweep steps in. */
 const GRACE_MS = 2 * 60_000;
 /** One sweep makes at most this many gateway calls per table. */
 const BATCH = 25;
+/** Background sweeps stay small: they run inside the request's grace period. */
+const BACKGROUND_BATCH = 8;
+/** Per-instance floor between opportunistic background sweeps. */
+const BACKGROUND_GAP_MS = 10 * 60_000;
 
 type Candidate = { id: string; reference: string; kind: ReconcileItem['kind'] };
 type ReconcileBase = Omit<ReconcileItem, 'outcome'>;
 
-export async function reconcileStuckTransactions(): Promise<ReconcileReport> {
+export async function reconcileStuckTransactions(limit: number = BATCH): Promise<ReconcileReport> {
   const report: ReconcileReport = { checked: 0, resolved: [], pending: [], errors: [] };
   if (!paymentsConfigured) {
     report.skipped = 'payments_not_configured';
@@ -50,7 +61,7 @@ export async function reconcileStuckTransactions(): Promise<ReconcileReport> {
     .not('reference', 'is', null)
     .lt('created_at', cutoff)
     .order('created_at', { ascending: false })
-    .limit(BATCH);
+    .limit(limit);
   if (depErr) throw new Error(`deposits: ${depErr.message}`);
 
   const { data: withdrawals, error: wdErr } = await admin
@@ -61,7 +72,7 @@ export async function reconcileStuckTransactions(): Promise<ReconcileReport> {
     .not('reference', 'is', null)
     .lt('created_at', cutoff)
     .order('created_at', { ascending: false })
-    .limit(BATCH);
+    .limit(limit);
   if (wdErr) throw new Error(`withdrawals: ${wdErr.message}`);
 
   const candidates: Candidate[] = [
@@ -70,6 +81,37 @@ export async function reconcileStuckTransactions(): Promise<ReconcileReport> {
   ];
 
   return reconcileAgainstGateway(admin, candidates);
+}
+
+// Module-scope, so it throttles per serverless instance — deliberately loose:
+// the sweep is idempotent and the gateway tolerates repeat enquiries.
+let lastBackgroundAt = 0;
+
+/**
+ * Queue a small reconciliation sweep to run AFTER the current response is
+ * sent (`after()` → waitUntil semantics), at most once per BACKGROUND_GAP_MS
+ * per instance. Call it from routes that touch money: it replaces the frequent
+ * cron that Vercel Hobby does not allow. Never throws — a missing request
+ * context or a failed sweep just means the next trigger retries.
+ */
+export function scheduleBackgroundReconcile() {
+  if (!paymentsConfigured) return;
+  const now = Date.now();
+  if (now - lastBackgroundAt < BACKGROUND_GAP_MS) return;
+  lastBackgroundAt = now;
+
+  try {
+    after(async () => {
+      try {
+        await reconcileStuckTransactions(BACKGROUND_BATCH);
+      } catch {
+        lastBackgroundAt = 0; // let the next request try sooner
+      }
+    });
+  } catch {
+    lastBackgroundAt = 0;
+    // Not inside a request render (or after() unsupported): silently skip.
+  }
 }
 
 /**

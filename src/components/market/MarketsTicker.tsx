@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { ArrowDownRight, ArrowUpRight, Radio, RefreshCw } from 'lucide-react';
 import { useAsync } from '@/lib/useAsync';
 import { fmtCompact, fmtUsd } from '@/lib/format';
@@ -17,6 +17,9 @@ type Tick = {
 type Source = 'coingecko' | 'binance' | 'offline';
 
 type Payload = { updated_at: string; source: Source; coins: Tick[] };
+
+/** The payload enriched at load time with the coins whose price just moved. */
+type LivePayload = Payload & { movers: Record<string, 'up' | 'down'> };
 
 const SOURCE_LABEL: Record<Source, string> = {
   coingecko: 'Live',
@@ -41,42 +44,46 @@ async function load(): Promise<Payload | null> {
  * the loop is seamless. Prices come from `/api/markets` (15s server cache) and
  * the tape re-reads on the same beat, flashing each card the moment its price
  * ticks. A manual refresh lets a member pull a fresh quote on demand.
+ *
+ * Movers are diffed inside the async loader, never in an effect: the flash is
+ * a fire-and-forget CSS animation restarted by re-keying the card with the
+ * quote timestamp, so no flash state (and no cascading render) exists at all.
  */
 export function MarketsTicker() {
-  const { data, loading, reload } = useAsync(load, []);
-  const [movers, setMovers] = useState<Record<string, 'up' | 'down'>>({});
   const prevPrices = useRef<Map<string, number> | null>(null);
+
+  const { data, loading, reload } = useAsync<LivePayload | null>(async () => {
+    const payload = await load();
+    if (!payload) return null;
+
+    const coins = payload.coins;
+    const movers: Record<string, 'up' | 'down'> = {};
+    if (coins.length) {
+      // Diff the incoming quotes against the last paint so only real moves flash.
+      const prev = prevPrices.current;
+      prevPrices.current = new Map(coins.map((c) => [c.symbol, c.price]));
+      if (prev) {
+        for (const coin of coins) {
+          const before = prev.get(coin.symbol);
+          if (before !== undefined && coin.price !== before) {
+            movers[coin.symbol] = coin.price > before ? 'up' : 'down';
+          }
+        }
+      }
+    }
+    return { ...payload, movers };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(reload, 15_000);
     return () => window.clearInterval(timer);
   }, [reload]);
 
-  // Diff the incoming quotes against the last paint so only real moves flash.
-  useEffect(() => {
-    const coins = data?.coins;
-    if (!coins?.length) return;
-
-    const prev = prevPrices.current;
-    prevPrices.current = new Map(coins.map((c) => [c.symbol, c.price]));
-    if (!prev) return;
-
-    const next: Record<string, 'up' | 'down'> = {};
-    for (const coin of coins) {
-      const before = prev.get(coin.symbol);
-      if (before !== undefined && coin.price !== before) {
-        next[coin.symbol] = coin.price > before ? 'up' : 'down';
-      }
-    }
-    if (Object.keys(next).length === 0) return;
-
-    setMovers(next);
-    const clear = window.setTimeout(() => setMovers({}), 900);
-    return () => window.clearTimeout(clear);
-  }, [data]);
-
   const coins = data?.coins ?? [];
   const live = data?.source !== 'offline';
+  // Changes with every fresh quote — used as the flash card's key so the
+  // one-shot CSS animation restarts even when the same symbol moves twice.
+  const flashId = data?.updated_at ?? '';
 
   return (
     <section>
@@ -115,7 +122,7 @@ export function MarketsTicker() {
             </div>
           ) : (
             <div className="ticker-track flex w-max">
-              <TickerRow coins={coins} movers={movers} />
+              <TickerRow coins={coins} movers={data?.movers ?? {}} flashId={flashId} />
               <TickerRow coins={coins} clone />
             </div>
           )}
@@ -130,16 +137,35 @@ export function MarketsTicker() {
  * two rows sit exactly 8px apart like every other card. Only the live row
  * flashes; the clone is decorative and stays quiet.
  */
-function TickerRow({ coins, clone = false, movers = {} }: { coins: Tick[]; clone?: boolean; movers?: Record<string, 'up' | 'down'> }) {
+function TickerRow({
+  coins,
+  clone = false,
+  movers = {},
+  flashId = '',
+}: {
+  coins: Tick[];
+  clone?: boolean;
+  movers?: Record<string, 'up' | 'down'>;
+  flashId?: string;
+}) {
   return (
     <div
       className="flex shrink-0 gap-2 pr-2"
       data-clone={clone ? '' : undefined}
       aria-hidden={clone || undefined}
     >
-      {coins.map((coin) => (
-        <TickCard key={coin.symbol} coin={coin} mover={clone ? undefined : movers[coin.symbol]} />
-      ))}
+      {coins.map((coin) => {
+        const mover = clone ? undefined : movers[coin.symbol];
+        return (
+          <TickCard
+            // A flashing card re-keys on each new quote, remounting it so the
+            // one-shot animation plays again — no timers, no state.
+            key={mover ? `${coin.symbol}:${flashId}` : coin.symbol}
+            coin={coin}
+            mover={mover}
+          />
+        );
+      })}
     </div>
   );
 }
