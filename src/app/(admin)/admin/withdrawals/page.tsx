@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Check, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
+import { Banknote, Check, RefreshCw, Send, X, Zap } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import { Empty, Loading, Notice, Panel, Segmented, TableScroll, Td, Th, statusTone } from '@/components/admin/kit';
 import { Badge, Button } from '@/components/ui';
 import { useToast } from '@/components/providers/ToastProvider';
-import { adminPayments, type AdminWithdrawal } from '@/lib/payments';
+import { adminPayments, type AdminWithdrawal, type PayoutMethod } from '@/lib/payments';
 import { useAsync } from '@/lib/useAsync';
 import { fmtDateTime, fmtUGX } from '@/lib/format';
 import { formatMsisdn } from '@/lib/msisdn';
@@ -22,10 +22,15 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
 ];
 
+const methodLabel = (method: PayoutMethod | null | undefined) =>
+  method === 'api' ? 'SHASHURA API' : method === 'manual' ? 'Manual' : null;
+
 export default function AdminWithdrawalsPage() {
   const toast = useToast();
   const [filter, setFilter] = useState<Filter>('pending');
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Approving now requires a payout method: the modal collects that decision.
+  const [methodRow, setMethodRow] = useState<AdminWithdrawal | null>(null);
 
   // The loader tags its result with the filter so a tab switch never shows the
   // previous tab's rows while the new request is in flight.
@@ -43,25 +48,26 @@ export default function AdminWithdrawalsPage() {
   const sum = (list: AdminWithdrawal[]) => list.reduce((total, row) => total + row.amount, 0);
 
   /**
-   * Two steps, deliberately: approve queues the request without touching the
-   * gateway, release pushes it. A gateway failure refunds the member.
+   * Approve picks the payout method: `api` pushes the disbursement through
+   * SHASHURA in the same call; `manual` queues the request until the admin —
+   * after sending the money by hand — confirms it with `settle`.
    */
-  async function review(row: AdminWithdrawal, action: 'approve' | 'release' | 'reject') {
+  async function review(row: AdminWithdrawal, action: 'approve' | 'release' | 'settle' | 'reject', method?: PayoutMethod) {
     let reason: string | undefined;
 
-    if (action === 'approve') {
+    if (action === 'release') {
       const ok = window.confirm(
-        `Approve ${fmtUGX(row.amount)} UGX for ${row.display_name ?? row.email ?? 'this member'}?\n\n` +
-          'This only queues the request — no money moves until you send it.',
-      );
-      if (!ok) return;
-    } else if (action === 'release') {
-      const ok = window.confirm(
-        `Send ${fmtUGX(row.net)} UGX to ${formatMsisdn(row.destination)}?\n\n` +
+        `Retry sending ${fmtUGX(row.net)} UGX to ${formatMsisdn(row.destination)}?\n\n` +
           `This pushes the payout through SHASHURA. Requested ${fmtUGX(row.amount)} UGX · fee ${fmtUGX(row.fee)} UGX.`,
       );
       if (!ok) return;
-    } else {
+    } else if (action === 'settle') {
+      const ok = window.confirm(
+        `Confirm you have sent ${fmtUGX(row.net)} UGX to ${formatMsisdn(row.destination)} by yourself?\n\n` +
+          'The request will be marked as paid. This cannot be undone.',
+      );
+      if (!ok) return;
+    } else if (action === 'reject') {
       const input = window.prompt('Reason for rejecting this request', 'Rejected by admin');
       if (input === null) return;
       reason = input.trim() || 'Rejected by admin';
@@ -70,11 +76,14 @@ export default function AdminWithdrawalsPage() {
     setBusyId(row.id);
     const res =
       action === 'approve'
-        ? await adminPayments.approve(row.id)
+        ? await adminPayments.approve(row.id, method!)
         : action === 'release'
           ? await adminPayments.release(row.id)
-          : await adminPayments.reject(row.id, reason);
+          : action === 'settle'
+            ? await adminPayments.settleManual(row.id)
+            : await adminPayments.reject(row.id, reason);
     setBusyId(null);
+    setMethodRow(null);
 
     if (!res.ok) {
       toast.push(res.message, 'err');
@@ -82,14 +91,20 @@ export default function AdminWithdrawalsPage() {
       return;
     }
 
-    toast.push(
-      action === 'approve'
-        ? 'Approved — open the Approved tab when you are ready to send it.'
-        : action === 'release'
-          ? `Payout released to ${formatMsisdn(row.destination)}.`
-          : 'Request rejected — the amount is back in the member’s wallet.',
-      'ok',
-    );
+    if (action === 'approve' && method === 'manual') {
+      toast.push('Approved as a manual payout — open the Approved tab to confirm it once sent.', 'ok');
+    } else if (action === 'approve' || action === 'release') {
+      toast.push(
+        res.data?.status === 'paid'
+          ? `Payout of ${fmtUGX(row.net)} UGX sent via SHASHURA to ${formatMsisdn(row.destination)}.`
+          : `Payout submitted to SHASHURA — it settles when the network confirms.`,
+        'ok',
+      );
+    } else if (action === 'settle') {
+      toast.push(`Marked as paid — manual payout to ${formatMsisdn(row.destination)} closed.`, 'ok');
+    } else {
+      toast.push('Request rejected — the amount is back in the member’s wallet.', 'ok');
+    }
     reload();
   }
 
@@ -97,26 +112,13 @@ export default function AdminWithdrawalsPage() {
     <>
       <AdminHeader
         title="Payouts"
-        description="Approve first, then send. Nothing reaches SHASHURA until an admin has approved the request."
+        description="Approve and pick the method: SHASHURA API pays automatically, manual stays with you until you confirm the transfer."
         actions={
           <Button size="sm" variant="secondary" onClick={reload} icon={<RefreshCw className="size-3.5" />}>
             Refresh
           </Button>
         }
       />
-
-      <div className="mb-3 flex items-start gap-3 rounded-card border border-line bg-surface px-4 py-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-accent-soft">
-          <ShieldCheck className="size-4 text-accent-2" />
-        </span>
-        <p className="text-[11px] leading-relaxed text-muted">
-          <span className="font-semibold text-fg">Approve</span> only queues the request — the amount stays held.
-          <span className="font-semibold text-fg"> Send</span> pushes the net amount through the gateway; a failed
-          payout is refunded to the member automatically. Actions are limited to accounts in{' '}
-          <code className="text-fg">ADMIN_EMAILS</code> or holding the <code className="text-fg">is_super_admin</code>{' '}
-          flag.
-        </p>
-      </div>
 
       {(awaiting.length > 0 || ready.length > 0) && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -128,7 +130,7 @@ export default function AdminWithdrawalsPage() {
           )}
           {ready.length > 0 && (
             <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent-soft px-3 py-1.5 text-[11px] font-semibold text-accent-2">
-              {ready.length} approved · ready to send
+              {ready.length} approved · awaiting payout
               <span className="tnum">{fmtUGX(sum(ready))} UGX</span>
             </span>
           )}
@@ -166,6 +168,7 @@ export default function AdminWithdrawalsPage() {
             <tbody>
               {rows.map((row) => {
                 const actionable = row.status === 'pending' || row.status === 'approved';
+                const manualQueue = row.status === 'approved' && row.payout_method === 'manual';
                 return (
                   <tr key={row.id} className="hover:bg-surface-2/50">
                     <Td>
@@ -189,9 +192,19 @@ export default function AdminWithdrawalsPage() {
                     </Td>
                     <Td>
                       <Badge tone={statusTone(row.status)}>{row.status}</Badge>
+                      {methodLabel(row.payout_method) && (
+                        <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          {methodLabel(row.payout_method)}
+                        </span>
+                      )}
                       {row.approved_by && (
                         <span className="mt-1 block max-w-[160px] truncate text-[10px] text-muted" title={row.approved_by}>
                           by {row.approved_by}
+                        </span>
+                      )}
+                      {row.paid_by && (
+                        <span className="mt-1 block max-w-[160px] truncate text-[10px] text-muted" title={row.paid_by}>
+                          paid by {row.paid_by}
                         </span>
                       )}
                       {row.failure_reason && (
@@ -207,12 +220,22 @@ export default function AdminWithdrawalsPage() {
                           {row.status === 'pending' ? (
                             <button
                               type="button"
-                              onClick={() => review(row, 'approve')}
+                              onClick={() => setMethodRow(row)}
                               disabled={busyId === row.id}
                               className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-bold text-accent-2 transition hover:bg-accent/20 disabled:opacity-50"
                             >
                               <Check className="size-3.5" />
                               Approve
+                            </button>
+                          ) : manualQueue ? (
+                            <button
+                              type="button"
+                              onClick={() => review(row, 'settle')}
+                              disabled={busyId === row.id}
+                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent-soft px-2 text-[11px] font-bold text-accent-2 transition hover:bg-accent/20 disabled:opacity-50"
+                            >
+                              <Banknote className="size-3.5" />
+                              Mark paid
                             </button>
                           ) : (
                             <button
@@ -253,6 +276,73 @@ export default function AdminWithdrawalsPage() {
           </TableScroll>
         )}
       </Panel>
+
+      {methodRow && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose payout method"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setMethodRow(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Payout method</div>
+            <h3 className="text-[15px] font-bold text-fg">
+              Approve {fmtUGX(methodRow.amount)} UGX for{' '}
+              {methodRow.display_name ?? methodRow.username ?? methodRow.email ?? 'this member'}
+            </h3>
+            <p className="mt-1 text-[11px] text-muted">
+              Net {fmtUGX(methodRow.net)} UGX · fee {fmtUGX(methodRow.fee)} UGX · to {formatMsisdn(methodRow.destination)}
+            </p>
+
+            <div className="mt-4 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => review(methodRow, 'approve', 'api')}
+                disabled={busyId === methodRow.id}
+                className="flex w-full items-start gap-3 rounded-xl border border-line bg-surface-2/60 p-3.5 text-left transition hover:border-accent/50 hover:bg-accent-soft disabled:opacity-50"
+              >
+                <Zap className="mt-0.5 size-5 shrink-0 text-accent-2" />
+                <span>
+                  <span className="block text-[13px] font-bold text-fg">SHASHURA API — pay automatically</span>
+                  <span className="block text-[11px] leading-relaxed text-muted">
+                    The payout is sent to {formatMsisdn(methodRow.destination)} through the gateway right now. If the
+                    network refuses, the amount is refunded to the member.
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => review(methodRow, 'approve', 'manual')}
+                disabled={busyId === methodRow.id}
+                className="flex w-full items-start gap-3 rounded-xl border border-line bg-surface-2/60 p-3.5 text-left transition hover:border-accent/50 hover:bg-accent-soft disabled:opacity-50"
+              >
+                <Banknote className="mt-0.5 size-5 shrink-0 text-accent-2" />
+                <span>
+                  <span className="block text-[13px] font-bold text-fg">Manual — I will send the money</span>
+                  <span className="block text-[11px] leading-relaxed text-muted">
+                    Only queues the request. You transfer {fmtUGX(methodRow.net)} UGX by hand, then press “Mark paid”
+                    in the Approved tab to close it.
+                  </span>
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMethodRow(null)}
+              disabled={busyId === methodRow.id}
+              className="mt-3 w-full rounded-xl py-2 text-center text-[12px] font-semibold text-muted transition hover:text-fg disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -29,7 +29,7 @@ export const rules = {
   welcomeBonus: 1_000,
   minDeposit: 30_000,
   maxDeposit: 2_000_000,
-  minWithdrawal: 10_000,
+  minWithdrawal: 5_000,
   withdrawalFeePct: 17,
   /** Task-center referral commission ceiling, summed across all milestones. */
   taskCommissionCap: 500_000,

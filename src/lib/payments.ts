@@ -51,6 +51,8 @@ export const payments = {
     post<DepositInit>('/api/payments/deposit', input),
 };
 
+export type PayoutMethod = 'manual' | 'api';
+
 export type AdminWithdrawal = {
   id: string;
   user_id?: string;
@@ -70,20 +72,33 @@ export type AdminWithdrawal = {
   created_at: string;
   approved_at?: string | null;
   approved_by?: string | null;
+  payout_method?: PayoutMethod | null;
+  paid_by?: string | null;
 };
 
 export const adminPayments = {
   withdrawals: (status = 'pending') =>
     get<AdminWithdrawal[]>(`/api/admin/withdrawals?status=${encodeURIComponent(status)}`),
 
-  /** Step one: queue the request. No money moves and the gateway is not called. */
-  approve: (id: string) =>
-    post<{ status: string; approved_by: string | null; message?: string }>(
-      `/api/admin/withdrawals/${id}`,
-      { action: 'approve' },
-    ),
+  /**
+   * Step one: approve and pick how the money moves. `manual` queues the payout
+   * for a later human confirmation; `api` pushes it through SHASHURA right away
+   * — the route returns the gateway result in the same response.
+   */
+  approve: (id: string, method: PayoutMethod) =>
+    post<{
+      status: string;
+      payout_method?: PayoutMethod;
+      approved_by: string | null;
+      tid?: string;
+      net?: number;
+      charge?: number;
+      destination?: string;
+      simulated?: boolean;
+      message?: string;
+    }>(`/api/admin/withdrawals/${id}`, { action: 'approve', method }),
 
-  /** Step two: push an approved request to SHASHURA. */
+  /** Retry the gateway push for an approved api request that never went out. */
   release: (id: string) =>
     post<{
       status: string;
@@ -94,6 +109,13 @@ export const adminPayments = {
       simulated?: boolean;
       message?: string;
     }>(`/api/admin/withdrawals/${id}`, { action: 'release' }),
+
+  /** Close a manual payout once the admin has actually sent the money. */
+  settleManual: (id: string) =>
+    post<{ status: string; paid_by: string | null }>(
+      `/api/admin/withdrawals/${id}`,
+      { action: 'settle_manual' },
+    ),
 
   reject: (id: string, reason?: string) =>
     post<{ status: string }>(`/api/admin/withdrawals/${id}`, { action: 'reject', reason }),

@@ -4,8 +4,9 @@ import { createAdminClient, hasServiceRole } from '@/lib/supabase/admin';
 import { normalizeMsisdn } from '@/lib/msisdn';
 import { disburse, paymentsConfigured, ShashuraError } from '@/lib/shasure';
 
-type Action = 'approve' | 'release' | 'reject';
-type Body = { action?: Action; reason?: string };
+type Action = 'approve' | 'release' | 'reject' | 'settle_manual';
+type PayoutMethod = 'manual' | 'api';
+type Body = { action?: Action; reason?: string; method?: PayoutMethod };
 
 type RpcEnvelope<T> = { ok?: boolean; code?: string; message?: string; data?: T };
 
@@ -24,15 +25,17 @@ function fail(code: string, message: string, status = 400) {
 }
 
 /**
- * The two-step payout gate.
+ * The withdrawal gate, now with a payout method chosen at approval.
  *
- * Approve : locks the request to `approved` and records which admin opened the
- *           gate. No money moves and nothing is sent to SHASHURA — the held
- *           amount stays in the member's `pending_withdrawal`.
- * Release : `km_admin_begin_payout` refuses anything that is not approved and
- *           unsent, then the payout is pushed from the server. If the gateway
- *           refuses, the request is rejected again so the held amount returns
- *           to the member's available balance automatically.
+ * Approve : locks the request to `approved`, records which admin opened the
+ *           gate and *how* the money is meant to move:
+ *           `manual` — the admin pays the member by hand and confirms with
+ *                      settle_manual; nothing is ever sent to SHASHURA;
+ *           `api`    — the payout is pushed through SHASHURA immediately, in
+ *                      the same call.
+ * Release : retry for an approved api request whose push did not complete.
+ *           `km_admin_begin_payout` refuses manual rows, anything already
+ *           sent, or anything that is not approved.
  * Reject  : the held amount is refunded to `available` and the request closed.
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -67,11 +70,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, data: { status: 'rejected' } });
   }
 
-  // Step one: approve. Money stays put and the gateway is not touched.
+  // Step one: approve with a payout method. Manual queues; api pays right away.
   if (body.action === 'approve') {
+    const method = body.method;
+    if (method !== 'manual' && method !== 'api') {
+      return fail('INVALID_METHOD', 'Choose a payout method: manual or api.');
+    }
+
     const approved = await admin.rpc('km_admin_approve_withdrawal', {
       p_id: id,
       p_admin: user.email ?? null,
+      p_method: method,
     });
     if (approved.error) return fail('APPROVE_FAILED', approved.error.message, 500);
 
@@ -80,21 +89,44 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return fail(row?.code ?? 'APPROVE_FAILED', row?.message ?? 'Could not approve the request.');
     }
 
-    return NextResponse.json({
-      ok: true,
-      data: {
-        status: row.data.status,
-        approved_by: row.data.approved_by,
-        message: 'Approved. Nothing has been sent to the gateway yet.',
-      },
-    });
+    if (method === 'manual') {
+      return NextResponse.json({
+        ok: true,
+        data: {
+          status: row.data.status,
+          payout_method: 'manual' as const,
+          approved_by: row.data.approved_by,
+          message: 'Approved as a manual payout. Send the money, then confirm it.',
+        },
+      });
+    }
+
+    // api: the approval and the payout are one decision — push now.
+    return releasePayout(admin, id);
+  }
+
+  if (body.action === 'settle_manual') {
+    const settled = await admin.rpc('km_admin_settle_manual_payout', { p_id: id, p_admin: user.email ?? null });
+    if (settled.error) return fail('SETTLE_FAILED', settled.error.message, 500);
+
+    const result = settled.data as RpcEnvelope<{ status: string; paid_by: string | null }> | null;
+    if (!result?.ok) return fail(result?.code ?? 'SETTLE_FAILED', result?.message ?? 'Could not confirm the payout.');
+    return NextResponse.json({ ok: true, data: { status: 'paid', paid_by: result.data?.paid_by ?? null } });
   }
 
   if (body.action !== 'release') {
-    return fail('INVALID_ACTION', 'Action must be approve, release or reject.');
+    return fail('INVALID_ACTION', 'Action must be approve, release, settle_manual or reject.');
   }
 
-  // Step two: hand an approved, unsent request to the gateway.
+  return releasePayout(admin, id);
+}
+
+/**
+ * Step two: hand an approved, unsent api request to the gateway. A failure at
+ * the network rejects the request again so the held amount returns to the
+ * member's available balance automatically.
+ */
+async function releasePayout(admin: ReturnType<typeof createAdminClient>, id: string): Promise<Response> {
   const begun = await admin.rpc('km_admin_begin_payout', { p_id: id });
   if (begun.error) return fail('RELEASE_FAILED', begun.error.message, 500);
 
@@ -121,7 +153,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (paid.error) return fail('PAYOUT_FAILED', paid.error.message, 500);
     return NextResponse.json({
       ok: true,
-      data: { status: 'paid', simulated: true, net: payout.net, destination: msisdn },
+      data: { status: 'paid', payout_method: 'api' as const, simulated: true, net: payout.net, destination: msisdn },
     });
   }
 
@@ -139,6 +171,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       ok: true,
       data: {
         status: transfer.status === 'TS' ? 'paid' : 'approved',
+        payout_method: 'api' as const,
         tid: transfer.tid,
         net: payout.net,
         charge: transfer.charge,
@@ -158,7 +191,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       await admin.rpc('km_admin_attach_payout', { p_id: id, p_provider_ref: payout.reference });
       return NextResponse.json({
         ok: true,
-        data: { status: 'approved', tid: payout.reference, net: payout.net, destination: msisdn },
+        data: { status: 'approved', payout_method: 'api' as const, tid: payout.reference, net: payout.net, destination: msisdn },
       });
     }
 
