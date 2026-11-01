@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, BadgeCheck, Minus, Plus, ShieldOff, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Copy, Eye, EyeOff, KeyRound, Minus, Plus, ShieldOff, ShieldCheck } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminShell';
 import {
   Empty, Loading, Notice, Panel, Stat, TableScroll, Td, Th, statusTone,
@@ -23,6 +23,9 @@ export default function AdminMemberDetailPage() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
   const [adjusting, setAdjusting] = useState<'credit' | 'debit' | null>(null);
+  const [showPw, setShowPw] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
 
   const { data, loading, reload } = useAsync(() => adminApi.members.detail(id), [id]);
   const detail = data?.ok ? data.data : null;
@@ -115,6 +118,47 @@ export default function AdminMemberDetailPage() {
     reload();
   }
 
+  /**
+   * Login password visibility for support (0016). The plain value is filed on
+   * the profile at sign-up and re-synced on every sign-in and password change,
+   * so the console copy matches the auth hash. Admins can also reset it here —
+   * the route writes the new hash and the readable copy together.
+   */
+  async function copyPassword() {
+    if (!profile.login_password) return;
+    try {
+      await navigator.clipboard.writeText(profile.login_password);
+      toast.push('Password copied.', 'ok');
+    } catch {
+      toast.push('Could not reach the clipboard.', 'err');
+    }
+  }
+
+  async function resetPassword() {
+    if (newPw.length < 6) {
+      toast.push('Use at least 6 characters.', 'err');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Reset @${profile.username}'s login password? Share the new password with the member through a trusted channel.`,
+    );
+    if (!confirmed) return;
+
+    setPwBusy(true);
+    const res = await adminApi.members.resetPassword(id, newPw);
+    setPwBusy(false);
+
+    if (!res.ok) {
+      toast.push(res.message, 'err');
+      return;
+    }
+
+    toast.push(`Password reset for @${profile.username}.`, 'ok');
+    setNewPw('');
+    setShowPw(true);
+    reload();
+  }
+
   return (
     <>
       <AdminHeader
@@ -182,6 +226,51 @@ export default function AdminMemberDetailPage() {
                 <span>Last activity · {stats.last_activity ? fmtDateTime(stats.last_activity) : '—'}</span>
               </div>
             </div>
+          </div>
+        </Panel>
+
+        {/* Login password ---------------------------------------------------- */}
+        <Panel
+          title="Login password"
+          subtitle="Support view — captured at sign-up and re-synced on every sign-in and password change."
+        >
+          {profile.login_password ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="tnum min-w-24 text-sm font-semibold text-fg">
+                {showPw ? profile.login_password : '••••••••'}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowPw((value) => !value)}
+                icon={showPw ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              >
+                {showPw ? 'Hide' : 'Reveal'}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={copyPassword} icon={<Copy className="size-3.5" />}>
+                Copy
+              </Button>
+            </div>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-muted">
+              Not on record yet — this account predates password capture. The password appears here after the
+              member&apos;s next sign-in, or you can set a new one below.
+            </p>
+          )}
+
+          <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-[220px_auto] sm:items-end">
+            <Field label="Reset to a new password">
+              <Input
+                value={newPw}
+                onChange={(event) => setNewPw(event.target.value.slice(0, 72))}
+                autoComplete="off"
+                placeholder="At least 6 characters"
+                className="h-10 rounded-xl text-[13px]"
+              />
+            </Field>
+            <Button size="sm" loading={pwBusy} onClick={resetPassword} icon={<KeyRound className="size-3.5" />}>
+              Reset password
+            </Button>
           </div>
         </Panel>
 

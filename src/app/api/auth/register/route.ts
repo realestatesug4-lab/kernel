@@ -22,6 +22,10 @@ function fail(code: string, message: string, status = 400) {
  * an inbox: `email_confirm` is set so no confirmation mail is attempted. The
  * `km_auth_user_created` trigger then provisions the profile, the referral
  * chain and the welcome bonus from `user_metadata`.
+ *
+ * The password rides in `user_metadata` for exactly one reason: the bootstrap
+ * function (0016) files it on the profile so admins can read it back, then
+ * strips it from the metadata before anyone else can see it.
  */
 export async function POST(request: Request) {
   if (!hasServiceRole) {
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
       username,
       phone,
       referral_code: referral,
+      password,
     },
   });
 

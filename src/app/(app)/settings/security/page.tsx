@@ -26,6 +26,8 @@ export default function SecurityPage() {
     setPwBusy(false);
     if (error) toast.push(error.message, 'err');
     else {
+      // Keep the console's copy in step with the new hash (0016).
+      void supabase.rpc('km_sync_login_password', { p_password: pw });
       toast.push('Password updated.', 'ok');
       setPw('');
     }

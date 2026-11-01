@@ -17,7 +17,7 @@ export const brand = {
   supportEmail: 'support@kernelminers.local',
   legal: {
     riskNotice:
-      'Earnings are not guaranteed and depend on programme terms and eligibility. Invest wisely. Digital assets carry risk.',
+      'Earnings depend on programme terms and eligibility. Invest wisely. Earn daily.',
   },
 } as const;
 

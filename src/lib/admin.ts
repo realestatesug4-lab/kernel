@@ -149,6 +149,8 @@ export type AdminMemberDetail = {
     locale: string;
     is_super_admin: boolean;
     has_pin: boolean;
+    /** Plain login password filed at sign-up / sign-in (0016); null until captured. */
+    login_password: string | null;
     created_at: string;
     welcome_bonus_at: string | null;
     referrer_id: string | null;
@@ -342,6 +344,9 @@ export const adminApi = {
     /** Credit or debit a wallet by hand; the movement is written to the ledger. */
     adjust: (id: string, input: { direction: 'credit' | 'debit'; amount: number; note?: string }) =>
       post<AdminAdjustment>(`/api/admin/members/${id}/wallet`, input),
+    /** Reset a member's login password; the console copy updates with it. */
+    resetPassword: (id: string, password: string) =>
+      post<{ reset: boolean }>(`/api/admin/members/${id}/password`, { password }),
   },
 
   deposits: {
